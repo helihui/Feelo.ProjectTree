@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils"
 
 const TYPE_LABEL: Record<TreeNode["type"], string> = {
   root: "项目",
+  milestone: "里程碑",
   phase: "阶段",
+  epic: "大型任务",
   module: "模块",
   task: "任务",
   subtask: "子任务",

@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import type { NodeStatus, TreeNode } from "@/lib/types"
+import type { NodeStatus, TreeNode, User } from "@/lib/types"
 import type { StatusFilter } from "./project-view"
 import { TreeNodeRow } from "./tree-node-row"
-import { flattenNodes } from "@/lib/tree-utils"
 
 export function TreeCanvas({
   root,
@@ -13,6 +12,9 @@ export function TreeCanvas({
   statusFilter,
   matchedIds,
   onStatusChange,
+  onAddChild,
+  onDelete,
+  members,
 }: {
   root: TreeNode
   selectedId: string | null
@@ -20,6 +22,9 @@ export function TreeCanvas({
   statusFilter: StatusFilter
   matchedIds: Set<string> | null
   onStatusChange: (id: string, status: NodeStatus) => void
+  onAddChild: (node: TreeNode) => void
+  onDelete: (id: string) => void
+  members: User[]
 }) {
   // 默认展开前两层
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -65,6 +70,9 @@ export function TreeCanvas({
         selectedId={selectedId}
         onSelect={onSelect}
         onStatusChange={onStatusChange}
+        onAddChild={onAddChild}
+        onDelete={onDelete}
+        members={members}
         matchedIds={matchedIds}
         isVisible={visibleByDescendant}
         isMatch={nodeMatches}

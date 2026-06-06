@@ -1,6 +1,6 @@
 "use client"
 
-import type { NodeStatus, TreeNode } from "@/lib/types"
+import type { NodeStatus, TreeNode, User } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   ChevronRight,
@@ -11,14 +11,23 @@ import {
   OctagonAlert,
   Circle,
   PauseCircle,
+  MoreHorizontal,
+  Plus,
+  Trash2,
 } from "lucide-react"
-import { computeProgress, computeStats, STATUS_META, NODE_TYPE_META } from "@/lib/tree-utils"
-import { getUser } from "@/lib/data"
+import {
+  computeProgress,
+  computeStats,
+  STATUS_META,
+  NODE_TYPE_META,
+  resolveUser,
+} from "@/lib/tree-utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -42,6 +51,9 @@ interface Props {
   selectedId: string | null
   onSelect: (id: string) => void
   onStatusChange: (id: string, status: NodeStatus) => void
+  onAddChild: (node: TreeNode) => void
+  onDelete: (id: string) => void
+  members: User[]
   matchedIds: Set<string> | null
   isVisible: (node: TreeNode) => boolean
   isMatch: (node: TreeNode) => boolean
@@ -57,6 +69,9 @@ export function TreeNodeRow(props: Props) {
     selectedId,
     onSelect,
     onStatusChange,
+    onAddChild,
+    onDelete,
+    members,
     matchedIds,
     isVisible,
     isMatch,
@@ -175,7 +190,7 @@ export function TreeNodeRow(props: Props) {
           </div>
           <div className="flex -space-x-1.5">
             {node.assigneeIds.slice(0, 2).map((id) => {
-              const u = getUser(id)
+              const u = resolveUser(members, id)
               return (
                 <Avatar key={id} className="h-5 w-5 border border-background">
                   <AvatarFallback
@@ -188,6 +203,35 @@ export function TreeNodeRow(props: Props) {
               )
             })}
           </div>
+
+          {/* 行操作菜单：新增子节点 / 删除 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-foreground focus:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100"
+              aria-label="节点操作"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onAddChild(node)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                添加子节点
+              </DropdownMenuItem>
+              {depth > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onDelete(node.id)}
+                    className="gap-2 text-destructive data-[highlighted]:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    删除节点
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

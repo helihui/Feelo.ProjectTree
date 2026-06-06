@@ -1,31 +1,58 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import type { NodeStatus, Project, TreeNode } from "@/lib/types"
+import type { NodeStatus, Project, TreeNode, User } from "@/lib/types"
 import { findNode, flattenNodes } from "@/lib/tree-utils"
 import { TreeToolbar } from "./tree-toolbar"
 import { TreeCanvas } from "./tree-canvas"
 import { NodeDetailPanel } from "./node-detail-panel"
 import { ProjectSummaryBar } from "./project-summary-bar"
+import { AddNodeDialog } from "./add-node-dialog"
+import {
+  updateNode as updateNodeAction,
+  addNode as addNodeAction,
+  deleteNode as deleteNodeAction,
+  type NodePatch,
+} from "@/app/actions/projects"
 import { ArrowLeft, Maximize2, Minimize2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 export type StatusFilter = NodeStatus | "all"
 
 /** 不可变更新某节点的部分字段 */
-function updateNode(
-  node: TreeNode,
-  id: string,
-  patch: Partial<TreeNode>,
-): TreeNode {
+function patchTree(node: TreeNode, id: string, patch: Partial<TreeNode>): TreeNode {
   if (node.id === id) return { ...node, ...patch }
   if (node.children.length === 0) return node
-  return { ...node, children: node.children.map((c) => updateNode(c, id, patch)) }
+  return { ...node, children: node.children.map((c) => patchTree(c, id, patch)) }
 }
 
-export function ProjectView({ project: initial }: { project: Project }) {
+/** 不可变插入子节点 */
+function insertChild(node: TreeNode, parentId: string, child: TreeNode): TreeNode {
+  if (node.id === parentId) return { ...node, children: [...node.children, child] }
+  if (node.children.length === 0) return node
+  return { ...node, children: node.children.map((c) => insertChild(c, parentId, child)) }
+}
+
+/** 不可变删除节点 */
+function removeNode(node: TreeNode, id: string): TreeNode {
+  return {
+    ...node,
+    children: node.children
+      .filter((c) => c.id !== id)
+      .map((c) => removeNode(c, id)),
+  }
+}
+
+export function ProjectView({
+  project: initial,
+  members,
+}: {
+  project: Project
+  members: User[]
+}) {
   const searchParams = useSearchParams()
   const initialNode = searchParams.get("node")
 
@@ -34,6 +61,8 @@ export function ProjectView({ project: initial }: { project: Project }) {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [expanded, setExpanded] = useState(false)
+  const [addParent, setAddParent] = useState<TreeNode | null>(null)
+  const [, startTransition] = useTransition()
 
   // 全屏放大时按 Esc 还原
   useEffect(() => {
@@ -50,27 +79,119 @@ export function ProjectView({ project: initial }: { project: Project }) {
     [root, selectedId],
   )
 
-  const handleStatusChange = useCallback((id: string, status: NodeStatus) => {
-    setRoot((prev) =>
-      updateNode(prev, id, {
-        status,
-        progress: status === "done" ? 100 : status === "todo" ? 0 : undefined,
-      } as Partial<TreeNode>),
-    )
-  }, [])
+  // 项目内已有标签的并集，供标签选择器复用
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    flattenNodes(root).forEach((n) => n.tags.forEach((t) => set.add(t)))
+    return Array.from(set).sort()
+  }, [root])
 
-  const handleProgressChange = useCallback((id: string, progress: number) => {
-    setRoot((prev) =>
-      updateNode(prev, id, {
-        progress,
-        status: progress === 100 ? "done" : progress === 0 ? "todo" : "progress",
-      }),
-    )
-  }, [])
+  const persist = useCallback(
+    (nodeId: string, patch: NodePatch) => {
+      startTransition(async () => {
+        try {
+          await updateNodeAction(initial.id, nodeId, patch)
+        } catch {
+          toast.error("保存失败，请重试")
+        }
+      })
+    },
+    [initial.id],
+  )
 
-  const handleUpdateNode = useCallback((id: string, patch: Partial<TreeNode>) => {
-    setRoot((prev) => updateNode(prev, id, patch))
-  }, [])
+  const handleStatusChange = useCallback(
+    (id: string, status: NodeStatus) => {
+      const progress = status === "done" ? 100 : status === "todo" ? 0 : undefined
+      setRoot((prev) =>
+        patchTree(prev, id, { status, ...(progress !== undefined ? { progress } : {}) }),
+      )
+      persist(id, { status, ...(progress !== undefined ? { progress } : {}) })
+    },
+    [persist],
+  )
+
+  const handleProgressChange = useCallback(
+    (id: string, progress: number) => {
+      const status: NodeStatus =
+        progress === 100 ? "done" : progress === 0 ? "todo" : "progress"
+      setRoot((prev) => patchTree(prev, id, { progress, status }))
+      persist(id, { progress, status })
+    },
+    [persist],
+  )
+
+  const handleUpdateNode = useCallback(
+    (id: string, patch: Partial<TreeNode>) => {
+      setRoot((prev) => patchTree(prev, id, patch))
+      const { comments, children, id: _omit, type, aiGenerated, ...rest } = patch as any
+      persist(id, rest as NodePatch)
+    },
+    [persist],
+  )
+
+  const handleAddNode = useCallback(
+    async (
+      parentId: string,
+      input: {
+        title: string
+        description?: string
+        type?: TreeNode["type"]
+        priority?: TreeNode["priority"]
+        assigneeIds?: string[]
+        startDate?: string | null
+        dueDate?: string | null
+        estimateHours?: number
+        tags?: string[]
+      },
+    ) => {
+      try {
+        const id = await addNodeAction(initial.id, parentId, input)
+        const newNode: TreeNode = {
+          id,
+          title: input.title,
+          description: input.description ?? "",
+          type: input.type ?? "task",
+          status: "todo",
+          priority: input.priority ?? "medium",
+          progress: 0,
+          assigneeIds: input.assigneeIds ?? [],
+          startDate: input.startDate ?? null,
+          dueDate: input.dueDate ?? null,
+          estimateHours: input.estimateHours ?? 0,
+          tags: input.tags ?? [],
+          comments: [],
+          aiGenerated: false,
+          children: [],
+        }
+        setRoot((prev) => insertChild(prev, parentId, newNode))
+        setSelectedId(id)
+        toast.success("已添加节点")
+      } catch {
+        toast.error("添加失败，请重试")
+      }
+    },
+    [initial.id],
+  )
+
+  const handleDeleteNode = useCallback(
+    (id: string) => {
+      if (id === root.id) {
+        toast.error("根节点不可删除")
+        return
+      }
+      setRoot((prev) => removeNode(prev, id))
+      if (selectedId === id) setSelectedId(null)
+      startTransition(async () => {
+        try {
+          await deleteNodeAction(initial.id, id)
+          toast.success("已删除节点")
+        } catch {
+          toast.error("删除失败，请刷新重试")
+        }
+      })
+    },
+    [initial.id, root.id, selectedId],
+  )
 
   // 搜索时高亮匹配的节点 id 集合
   const matchedIds = useMemo(() => {
@@ -148,6 +269,9 @@ export function ProjectView({ project: initial }: { project: Project }) {
             statusFilter={statusFilter}
             matchedIds={matchedIds}
             onStatusChange={handleStatusChange}
+            onAddChild={(node) => setAddParent(node)}
+            onDelete={handleDeleteNode}
+            members={members}
           />
         </div>
 
@@ -156,13 +280,29 @@ export function ProjectView({ project: initial }: { project: Project }) {
             key={selectedNode.id}
             node={selectedNode}
             project={initial}
+            members={members}
+            allTags={allTags}
             onClose={() => setSelectedId(null)}
             onStatusChange={handleStatusChange}
             onProgressChange={handleProgressChange}
             onUpdate={handleUpdateNode}
+            onAddChild={() => setAddParent(selectedNode)}
+            onDelete={() => handleDeleteNode(selectedNode.id)}
           />
         )}
       </div>
+
+      <AddNodeDialog
+        open={!!addParent}
+        parent={addParent}
+        members={members}
+        allTags={allTags}
+        onOpenChange={(o) => !o && setAddParent(null)}
+        onSubmit={async (input) => {
+          if (addParent) await handleAddNode(addParent.id, input)
+          setAddParent(null)
+        }}
+      />
     </div>
   )
 }

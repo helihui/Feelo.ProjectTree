@@ -1,4 +1,16 @@
-import type { NodeStatus, NodeType, Priority, TreeNode } from "./types"
+import type { NodeStatus, NodeType, Priority, TreeNode, User } from "./types"
+
+/** 从成员列表解析用户，未找到时返回占位用户 */
+export function resolveUser(members: User[], id: string): User {
+  return (
+    members.find((u) => u.id === id) ?? {
+      id,
+      name: "未知成员",
+      initials: "?",
+      color: "oklch(0.6 0.02 260)",
+    }
+  )
+}
 
 export const STATUS_META: Record<
   NodeStatus,
@@ -44,8 +56,11 @@ export const PRIORITY_META: Record<Priority, { label: string; className: string 
 }
 
 export const NODE_TYPE_META: Record<NodeType, { label: string }> = {
+  root: { label: "项目" },
   milestone: { label: "里程碑" },
+  phase: { label: "阶段" },
   epic: { label: "大型任务" },
+  module: { label: "模块" },
   task: { label: "任务" },
   subtask: { label: "子任务" },
 }

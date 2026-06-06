@@ -11,6 +11,7 @@ import {
   MessageSquareText,
   Settings,
   GitBranch,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -19,6 +20,7 @@ import { CURRENT_USER } from "@/lib/data"
 const NAV = [
   { href: "/", label: "概览", icon: LayoutDashboard },
   { href: "/projects", label: "项目", icon: FolderTree },
+  { href: "/members", label: "成员", icon: Users },
   { href: "/create", label: "AI 创建", icon: Sparkles },
   { href: "/reports", label: "进度报告", icon: FileText },
 ]

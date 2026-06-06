@@ -1,6 +1,13 @@
 export type NodeStatus = "todo" | "progress" | "done" | "blocked" | "paused"
 
-export type NodeType = "root" | "phase" | "module" | "task" | "subtask"
+export type NodeType =
+  | "root"
+  | "milestone"
+  | "phase"
+  | "epic"
+  | "module"
+  | "task"
+  | "subtask"
 
 export type Priority = "low" | "medium" | "high" | "urgent"
 

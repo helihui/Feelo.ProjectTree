@@ -146,7 +146,9 @@ export function AddNodeDialog({
               <Label>类型</Label>
               <Select value={type} onValueChange={(v) => setType(v as NodeType)}>
                 <SelectTrigger className="h-9 w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: NodeType) => NODE_TYPE_META[v]?.label ?? v}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {TYPE_OPTIONS.map((t) => (
@@ -161,7 +163,11 @@ export function AddNodeDialog({
               <Label>优先级</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
                 <SelectTrigger className="h-9 w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: Priority) =>
+                      PRIORITY_OPTIONS.find((p) => p.value === v)?.label ?? v
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PRIORITY_OPTIONS.map((p) => (

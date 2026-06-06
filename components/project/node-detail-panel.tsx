@@ -32,6 +32,8 @@ import {
   Clock,
   Tag,
   Send,
+  Minus,
+  Plus,
 } from "lucide-react"
 
 export function NodeDetailPanel({
@@ -152,13 +154,53 @@ export function NodeDetailPanel({
             <span className="text-sm font-semibold tabular-nums">{progress}%</span>
           </div>
           {isLeaf ? (
-            <Slider
-              value={[progress]}
-              max={100}
-              step={5}
-              onValueChange={(v) => onProgressChange(node.id, v[0])}
-              className="mt-3"
-            />
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  aria-label="减少 5%"
+                  onClick={() => onProgressChange(node.id, Math.max(0, progress - 5))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Slider
+                  value={[progress]}
+                  max={100}
+                  step={5}
+                  onValueChange={(v) => {
+                    const next = v[0]
+                    if (typeof next === "number" && !Number.isNaN(next)) {
+                      onProgressChange(node.id, next)
+                    }
+                  }}
+                  className="flex-1 py-2"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  aria-label="增加 5%"
+                  onClick={() => onProgressChange(node.id, Math.min(100, progress + 5))}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mt-3 grid grid-cols-5 gap-1.5">
+                {[0, 25, 50, 75, 100].map((p) => (
+                  <Button
+                    key={p}
+                    variant={progress === p ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 px-0 text-xs tabular-nums"
+                    onClick={() => onProgressChange(node.id, p)}
+                  >
+                    {p}%
+                  </Button>
+                ))}
+              </div>
+            </div>
           ) : (
             <>
               <Progress value={progress} className="mt-2 h-2" />

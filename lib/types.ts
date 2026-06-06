@@ -1,6 +1,6 @@
 export type NodeStatus = "todo" | "progress" | "done" | "blocked" | "paused"
 
-export type NodeType = "milestone" | "epic" | "task" | "subtask"
+export type NodeType = "root" | "phase" | "module" | "task" | "subtask"
 
 export type Priority = "low" | "medium" | "high" | "urgent"
 
@@ -70,6 +70,19 @@ export interface AIModel {
   costPer1k: string
   latency: "low" | "medium" | "high"
   capabilities: string[]
+}
+
+export interface ModelProvider {
+  id: string
+  name: string
+  enabled: boolean
+  isDefault: boolean
+  isFallback?: boolean
+  models: string[]
+  selectedModel: string
+  latencyMs: number
+  successRate: number
+  monthlyCalls: number
 }
 
 export interface ActivityItem {

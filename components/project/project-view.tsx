@@ -19,6 +19,15 @@ import {
 import { ArrowLeft, Maximize2, Minimize2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export type StatusFilter = NodeStatus | "all"
 
@@ -62,6 +71,7 @@ export function ProjectView({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [expanded, setExpanded] = useState(false)
   const [addParent, setAddParent] = useState<TreeNode | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null)
   const [, startTransition] = useTransition()
 
   // 全屏放大时按 Esc 还原
@@ -173,6 +183,20 @@ export function ProjectView({
     [initial.id],
   )
 
+  // 请求删除：先弹确认框
+  const requestDeleteNode = useCallback(
+    (id: string) => {
+      if (id === root.id) {
+        toast.error("根节点不可删除")
+        return
+      }
+      const node = findNode(root, id)
+      if (node) setPendingDelete(node)
+    },
+    [root],
+  )
+
+  // 确认后真正执行删除
   const handleDeleteNode = useCallback(
     (id: string) => {
       if (id === root.id) {
@@ -270,7 +294,7 @@ export function ProjectView({
             matchedIds={matchedIds}
             onStatusChange={handleStatusChange}
             onAddChild={(node) => setAddParent(node)}
-            onDelete={handleDeleteNode}
+            onDelete={requestDeleteNode}
             members={members}
           />
         </div>
@@ -287,7 +311,7 @@ export function ProjectView({
             onProgressChange={handleProgressChange}
             onUpdate={handleUpdateNode}
             onAddChild={() => setAddParent(selectedNode)}
-            onDelete={() => handleDeleteNode(selectedNode.id)}
+            onDelete={() => requestDeleteNode(selectedNode.id)}
           />
         )}
       </div>
@@ -303,6 +327,36 @@ export function ProjectView({
           setAddParent(null)
         }}
       />
+
+      {/* 删除节点确认 */}
+      <Dialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除节点</DialogTitle>
+            <DialogDescription>
+              确定删除「{pendingDelete?.title}」吗？
+              {pendingDelete && pendingDelete.children.length > 0
+                ? ` 该节点下的 ${pendingDelete.children.length} 个子节点也会被一并删除。`
+                : ""}
+              {" "}该操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDelete(null)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (pendingDelete) handleDeleteNode(pendingDelete.id)
+                setPendingDelete(null)
+              }}
+            >
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

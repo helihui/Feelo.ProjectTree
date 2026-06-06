@@ -140,7 +140,7 @@ export function MembersView({ initialMembers }: { initialMembers: MemberItem[] }
 
         <div className="grid gap-3 sm:grid-cols-2">
           {members.map((m) => (
-            <Card key={m.id} className="flex items-center gap-3 p-4">
+            <Card key={m.id} className="flex flex-row items-center gap-3 p-4">
               <Avatar className="h-11 w-11 shrink-0">
                 <AvatarFallback
                   className="text-sm font-semibold text-primary-foreground"

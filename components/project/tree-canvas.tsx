@@ -54,7 +54,7 @@ export function TreeCanvas({
   }
 
   return (
-    <div className="min-w-fit px-4 py-5 sm:px-6">
+    <div className="min-w-fit px-4 pb-5 pt-14 sm:px-6">
       <TreeNodeRow
         node={root}
         depth={0}

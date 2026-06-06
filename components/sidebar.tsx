@@ -14,8 +14,15 @@ import {
   Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { CURRENT_USER } from "@/lib/data"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useSession } from "@/lib/auth-client"
+
+function initialsOf(name?: string | null) {
+  if (!name) return "U"
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
 
 const NAV = [
   { href: "/", label: "概览", icon: LayoutDashboard },
@@ -32,6 +39,8 @@ const NAV_SETTINGS = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const user = session?.user
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
@@ -98,21 +107,25 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-sidebar-accent/60">
+        <Link
+          href="/profile"
+          className={cn(
+            "flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent/60",
+            pathname.startsWith("/profile") && "bg-sidebar-accent",
+          )}
+        >
           <Avatar className="h-8 w-8">
-            <AvatarFallback
-              className="text-xs font-semibold text-primary-foreground"
-              style={{ backgroundColor: CURRENT_USER.color }}
-            >
-              {CURRENT_USER.initials}
+            {user?.image && <AvatarImage src={user.image || "/placeholder.svg"} alt={user?.name ?? "用户"} />}
+            <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
+              {initialsOf(user?.name)}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-1 flex-col leading-tight">
-            <span className="text-sm font-medium">{CURRENT_USER.name}</span>
-            <span className="text-xs text-muted-foreground">项目负责人</span>
+            <span className="truncate text-sm font-medium">{user?.name ?? "未登录"}</span>
+            <span className="truncate text-xs text-muted-foreground">{user?.email ?? "点击登录"}</span>
           </div>
-          <Settings className="h-4 w-4 text-muted-foreground" />
-        </div>
+          <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
       </div>
     </aside>
   )

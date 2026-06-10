@@ -1,4 +1,4 @@
-import { db } from "./index"
+import { db, ensureSchema } from "./index"
 import { members, projects, nodes } from "./schema"
 import { PROJECTS, USERS } from "@/lib/data"
 import type { TreeNode } from "@/lib/types"
@@ -55,6 +55,7 @@ let seedPromise: Promise<void> | null = null
 export async function ensureSeeded(): Promise<void> {
   if (seedPromise) return seedPromise
   seedPromise = (async () => {
+    await ensureSchema()
     const existing = await db.select({ id: projects.id }).from(projects).limit(1)
     if (existing.length > 0) return
 

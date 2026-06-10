@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth"
 import { pool } from "@/lib/db"
 
+const localDevBaseURL = "http://localhost:3000"
+
 export const auth = betterAuth({
   database: pool,
   baseURL:
@@ -9,7 +11,8 @@ export const auth = betterAuth({
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : process.env.V0_RUNTIME_URL),
+        : process.env.V0_RUNTIME_URL ??
+          (process.env.NODE_ENV === "development" ? localDevBaseURL : undefined)),
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,

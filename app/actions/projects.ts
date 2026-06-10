@@ -1,12 +1,58 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db, pool } from "@/lib/db"
 import { members, projects, nodes } from "@/lib/db/schema"
 import type { NodeRow, MemberRow } from "@/lib/db/schema"
 import { ensureSeeded } from "@/lib/db/seed"
 import type { Project, TreeNode, NodeStatus, NodeType, Priority, User } from "@/lib/types"
 import { and, asc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+
+export type DatabaseTableInfo = {
+  schema: string
+  name: string
+  type: "BASE TABLE" | "VIEW"
+}
+
+export async function getDatabaseTables(input?: {
+  schema?: string
+  includeViews?: boolean
+  includeSystemSchemas?: boolean
+}): Promise<DatabaseTableInfo[]> {
+  const includeViews = input?.includeViews ?? false
+  const includeSystemSchemas = input?.includeSystemSchemas ?? false
+
+  const allowedTypes = includeViews ? ["BASE TABLE", "VIEW"] : ["BASE TABLE"]
+
+  const where: string[] = [`table_type = ANY($1::text[])`]
+  const params: unknown[] = [allowedTypes]
+
+  if (input?.schema) {
+    params.push(input.schema)
+    where.push(`table_schema = $${params.length}`)
+  } else if (!includeSystemSchemas) {
+    where.push(`table_schema NOT IN ('pg_catalog','information_schema')`)
+  }
+
+  const sql = `
+    SELECT table_schema, table_name, table_type
+    FROM information_schema.tables
+    WHERE ${where.join(" AND ")}
+    ORDER BY table_schema, table_name
+  `
+
+  const res = await pool.query<{
+    table_schema: string
+    table_name: string
+    table_type: "BASE TABLE" | "VIEW"
+  }>(sql, params)
+
+  return res.rows.map((r) => ({
+    schema: r.table_schema,
+    name: r.table_name,
+    type: r.table_type,
+  }))
+}
 
 function rowToTreeNode(row: NodeRow, byParent: Map<string | null, NodeRow[]>): TreeNode {
   const children = (byParent.get(row.id) ?? []).map((c) => rowToTreeNode(c, byParent))

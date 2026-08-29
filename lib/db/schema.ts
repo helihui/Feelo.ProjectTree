@@ -15,6 +15,21 @@ export const members = pgTable("members", {
   color: text("color").notNull(),
   email: text("email"),
   role: text("role").notNull().default("成员"),
+  // 权限角色标识：admin / manager / member / guest
+  roleKey: text("roleKey").notNull().default("member"),
+  // 关联的登录账号，未开通账号时为 null
+  userId: text("userId"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// 邀请链接（成员凭链接自行注册并设置密码）
+export const invitations = pgTable("invitations", {
+  token: text("token").primaryKey(),
+  memberId: text("memberId").notNull(),
+  email: text("email").notNull(),
+  roleKey: text("roleKey").notNull().default("member"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -50,9 +65,20 @@ export const nodes = pgTable("nodes", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+export const nodeComments = pgTable("node_comments", {
+  id: text("id").primaryKey(),
+  nodeId: text("nodeId").notNull(),
+  projectId: text("projectId").notNull(),
+  authorId: text("authorId").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export type MemberRow = typeof members.$inferSelect
 export type ProjectRow = typeof projects.$inferSelect
 export type NodeRow = typeof nodes.$inferSelect
+export type NodeCommentRow = typeof nodeComments.$inferSelect
+export type InvitationRow = typeof invitations.$inferSelect
 
 // ===== Better Auth 表 =====
 export const user = pgTable("user", {

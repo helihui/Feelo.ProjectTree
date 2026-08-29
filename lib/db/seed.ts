@@ -51,46 +51,58 @@ function flatten(
 
 let seedPromise: Promise<void> | null = null
 
-/** 首次访问时把内置示例数据写入数据库（幂等：仅当 projects 表为空时执行）。 */
+/** 每次启动都补齐内置示例数据（幂等：按主键去重，不覆盖已有数据）。 */
 export async function ensureSeeded(): Promise<void> {
   if (seedPromise) return seedPromise
   seedPromise = (async () => {
     await ensureSchema()
-    const existing = await db.select({ id: projects.id }).from(projects).limit(1)
-    if (existing.length > 0) return
 
-    await db
-      .insert(members)
-      .values(
-        USERS.map((u) => ({
-          id: u.id,
-          name: u.name,
-          initials: u.initials,
-          color: u.color,
-          email: EMAIL_BY_ID[u.id] ?? null,
-          role: ROLE_BY_ID[u.id] ?? "成员",
-        })),
-      )
-      .onConflictDoNothing()
+    const [existingMembers, existingProjects, existingNodeProjects] = await Promise.all([
+      db.select({ id: members.id }).from(members),
+      db.select({ id: projects.id }).from(projects),
+      // 只取去重后的 projectId，避免对 nodes 全表拉取
+      db.selectDistinct({ projectId: nodes.projectId }).from(nodes),
+    ])
+
+    const memberIds = new Set(existingMembers.map((m) => m.id))
+    const projectIds = new Set(existingProjects.map((p) => p.id))
+    const nodeProjectIds = new Set(existingNodeProjects.map((n) => n.projectId))
+
+    const missingMembers = USERS.filter((u) => !memberIds.has(u.id)).map((u) => ({
+      id: u.id,
+      name: u.name,
+      initials: u.initials,
+      color: u.color,
+      email: EMAIL_BY_ID[u.id] ?? null,
+      role: ROLE_BY_ID[u.id] ?? "成员",
+    }))
+
+    if (missingMembers.length > 0) {
+      await db.insert(members).values(missingMembers).onConflictDoNothing()
+    }
 
     for (const p of PROJECTS) {
-      await db
-        .insert(projects)
-        .values({
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          ownerId: p.ownerId,
-          memberIds: p.memberIds,
-          createdAt: new Date(p.createdAt),
-          updatedAt: new Date(p.updatedAt),
-        })
-        .onConflictDoNothing()
+      if (!projectIds.has(p.id)) {
+        await db
+          .insert(projects)
+          .values({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            ownerId: p.ownerId,
+            memberIds: p.memberIds,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt),
+          })
+          .onConflictDoNothing()
+      }
 
-      const rows: NodeInsert[] = []
-      flatten(p.root, p.id, null, 0, rows)
-      if (rows.length > 0) {
-        await db.insert(nodes).values(rows).onConflictDoNothing()
+      if (!nodeProjectIds.has(p.id)) {
+        const rows: NodeInsert[] = []
+        flatten(p.root, p.id, null, 0, rows)
+        if (rows.length > 0) {
+          await db.insert(nodes).values(rows).onConflictDoNothing()
+        }
       }
     }
   })().catch((err) => {

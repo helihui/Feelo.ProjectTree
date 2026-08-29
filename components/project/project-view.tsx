@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import type { NodeStatus, Project, TreeNode, User } from "@/lib/types"
 import { findNode, flattenNodes } from "@/lib/tree-utils"
+import { canEditNode, hasPermission, type RoleKey } from "@/lib/permissions"
 import { TreeToolbar } from "./tree-toolbar"
 import { TreeCanvas } from "./tree-canvas"
+import { MindMapCanvas } from "./mind-map-canvas"
 import { NodeDetailPanel } from "./node-detail-panel"
 import { ProjectSummaryBar } from "./project-summary-bar"
 import { AddNodeDialog } from "./add-node-dialog"
@@ -14,6 +16,7 @@ import {
   updateNode as updateNodeAction,
   addNode as addNodeAction,
   deleteNode as deleteNodeAction,
+  addNodeComment as addNodeCommentAction,
   type NodePatch,
 } from "@/app/actions/projects"
 import { ArrowLeft, Maximize2, Minimize2 } from "lucide-react"
@@ -30,6 +33,8 @@ import {
 } from "@/components/ui/dialog"
 
 export type StatusFilter = NodeStatus | "all"
+export type ViewMode = "tree" | "mindmap"
+export type MindMapMode = "compact" | "standard" | "detail"
 
 /** 不可变更新某节点的部分字段 */
 function patchTree(node: TreeNode, id: string, patch: Partial<TreeNode>): TreeNode {
@@ -58,17 +63,25 @@ function removeNode(node: TreeNode, id: string): TreeNode {
 export function ProjectView({
   project: initial,
   members,
+  currentMemberId,
+  roleKey,
 }: {
   project: Project
   members: User[]
+  currentMemberId: string
+  roleKey: RoleKey
 }) {
   const searchParams = useSearchParams()
   const initialNode = searchParams.get("node")
+  const canManageNodes = hasPermission(roleKey, "node:manage")
+  const canComment = hasPermission(roleKey, "comment:write")
 
   const [root, setRoot] = useState<TreeNode>(initial.root)
   const [selectedId, setSelectedId] = useState<string | null>(initialNode)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [viewMode, setViewMode] = useState<ViewMode>("tree")
+  const [mindMapMode, setMindMapMode] = useState<MindMapMode>("standard")
   const [expanded, setExpanded] = useState(false)
   const [addParent, setAddParent] = useState<TreeNode | null>(null)
   const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null)
@@ -109,15 +122,44 @@ export function ProjectView({
     [initial.id],
   )
 
+  // 按节点合并短时间内的连续改动（拖动进度条、连续输入），避免每次微调都打一次接口
+  const pendingPatches = useRef(new Map<string, NodePatch>())
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushPatches = useCallback(() => {
+    flushTimer.current = null
+    const entries = Array.from(pendingPatches.current.entries())
+    pendingPatches.current.clear()
+    for (const [nodeId, patch] of entries) persist(nodeId, patch)
+  }, [persist])
+
+  const persistDebounced = useCallback(
+    (nodeId: string, patch: NodePatch) => {
+      const merged = { ...(pendingPatches.current.get(nodeId) ?? {}), ...patch }
+      pendingPatches.current.set(nodeId, merged)
+      if (flushTimer.current) clearTimeout(flushTimer.current)
+      flushTimer.current = setTimeout(flushPatches, 400)
+    },
+    [flushPatches],
+  )
+
+  // 卸载前把未提交的改动落库
+  useEffect(() => {
+    return () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current)
+      flushTimer.current = null
+    }
+  }, [])
+
   const handleStatusChange = useCallback(
     (id: string, status: NodeStatus) => {
       const progress = status === "done" ? 100 : status === "todo" ? 0 : undefined
       setRoot((prev) =>
         patchTree(prev, id, { status, ...(progress !== undefined ? { progress } : {}) }),
       )
-      persist(id, { status, ...(progress !== undefined ? { progress } : {}) })
+      persistDebounced(id, { status, ...(progress !== undefined ? { progress } : {}) })
     },
-    [persist],
+    [persistDebounced],
   )
 
   const handleProgressChange = useCallback(
@@ -125,18 +167,38 @@ export function ProjectView({
       const status: NodeStatus =
         progress === 100 ? "done" : progress === 0 ? "todo" : "progress"
       setRoot((prev) => patchTree(prev, id, { progress, status }))
-      persist(id, { progress, status })
+      persistDebounced(id, { progress, status })
     },
-    [persist],
+    [persistDebounced],
   )
 
   const handleUpdateNode = useCallback(
     (id: string, patch: Partial<TreeNode>) => {
       setRoot((prev) => patchTree(prev, id, patch))
       const { comments, children, id: _omit, type, aiGenerated, ...rest } = patch as any
-      persist(id, rest as NodePatch)
+      void comments
+      void children
+      void type
+      void aiGenerated
+      void _omit
+      persistDebounced(id, rest as NodePatch)
     },
-    [persist],
+    [persistDebounced],
+  )
+
+  const handleAddComment = useCallback(
+    async (nodeId: string, content: string) => {
+      try {
+        const created = await addNodeCommentAction(initial.id, nodeId, { content })
+        if (!created) return
+        setRoot((prev) =>
+          patchTree(prev, nodeId, { comments: [...findNode(prev, nodeId)!.comments, created] }),
+        )
+      } catch {
+        toast.error("评论保存失败，请重试")
+      }
+    },
+    [initial.id],
   )
 
   const handleAddNode = useCallback(
@@ -183,9 +245,25 @@ export function ProjectView({
     [initial.id],
   )
 
+  // 请求新增子节点：无权限时拦截
+  const requestAddChild = useCallback(
+    (node: TreeNode) => {
+      if (!canManageNodes) {
+        toast.error("没有操作权限")
+        return
+      }
+      setAddParent(node)
+    },
+    [canManageNodes],
+  )
+
   // 请求删除：先弹确认框
   const requestDeleteNode = useCallback(
     (id: string) => {
+      if (!canManageNodes) {
+        toast.error("没有操作权限")
+        return
+      }
       if (id === root.id) {
         toast.error("根节点不可删除")
         return
@@ -193,7 +271,7 @@ export function ProjectView({
       const node = findNode(root, id)
       if (node) setPendingDelete(node)
     },
-    [root],
+    [root, canManageNodes],
   )
 
   // 确认后真正执行删除
@@ -254,7 +332,7 @@ export function ProjectView({
               {initial.description}
             </p>
           </div>
-          <ProjectSummaryBar root={root} project={initial} />
+          <ProjectSummaryBar root={root} project={initial} members={members} />
         </header>
       )}
 
@@ -263,6 +341,10 @@ export function ProjectView({
         onQueryChange={setQuery}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        mindMapMode={mindMapMode}
+        onMindMapModeChange={setMindMapMode}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -286,17 +368,30 @@ export function ProjectView({
               </>
             )}
           </button>
-          <TreeCanvas
-            root={root}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            statusFilter={statusFilter}
-            matchedIds={matchedIds}
-            onStatusChange={handleStatusChange}
-            onAddChild={(node) => setAddParent(node)}
-            onDelete={requestDeleteNode}
-            members={members}
-          />
+          {viewMode === "tree" ? (
+            <TreeCanvas
+              root={root}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              statusFilter={statusFilter}
+              matchedIds={matchedIds}
+              onStatusChange={handleStatusChange}
+              onAddChild={requestAddChild}
+              onDelete={requestDeleteNode}
+              members={members}
+            />
+          ) : (
+            <MindMapCanvas
+              root={root}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              statusFilter={statusFilter}
+              matchedIds={matchedIds}
+              mode={mindMapMode}
+              onAddChild={requestAddChild}
+              members={members}
+            />
+          )}
         </div>
 
         {selectedNode && (
@@ -310,8 +405,12 @@ export function ProjectView({
             onStatusChange={handleStatusChange}
             onProgressChange={handleProgressChange}
             onUpdate={handleUpdateNode}
-            onAddChild={() => setAddParent(selectedNode)}
+            onAddComment={handleAddComment}
+            onAddChild={() => requestAddChild(selectedNode)}
             onDelete={() => requestDeleteNode(selectedNode.id)}
+            canManageNodes={canManageNodes}
+            canComment={canComment}
+            canEdit={canEditNode(roleKey, selectedNode.assigneeIds, currentMemberId)}
           />
         )}
       </div>

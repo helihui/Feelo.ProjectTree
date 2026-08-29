@@ -12,7 +12,6 @@ import {
   daysUntil,
   resolveUser,
 } from "@/lib/tree-utils"
-import { CURRENT_USER } from "@/lib/data"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -54,8 +53,12 @@ export function NodeDetailPanel({
   onStatusChange,
   onProgressChange,
   onUpdate,
+  onAddComment,
   onAddChild,
   onDelete,
+  canManageNodes,
+  canComment,
+  canEdit,
 }: {
   node: TreeNode
   project: Project
@@ -65,10 +68,18 @@ export function NodeDetailPanel({
   onStatusChange: (id: string, status: NodeStatus) => void
   onProgressChange: (id: string, progress: number) => void
   onUpdate: (id: string, patch: Partial<TreeNode>) => void
+  onAddComment: (nodeId: string, content: string) => Promise<void> | void
   onAddChild: () => void
   onDelete: () => void
+  /** 可增删节点（管理员 / 项目经理） */
+  canManageNodes: boolean
+  /** 可发表评论 */
+  canComment: boolean
+  /** 可编辑当前节点（管理级或本人负责） */
+  canEdit: boolean
 }) {
   const [commentDraft, setCommentDraft] = useState("")
+  const [submittingComment, setSubmittingComment] = useState(false)
   const [editingMeta, setEditingMeta] = useState(false)
   const [title, setTitle] = useState(node.title)
   const [description, setDescription] = useState(node.description)
@@ -96,21 +107,16 @@ export function NodeDetailPanel({
     if (description !== node.description) onUpdate(node.id, { description })
   }
 
-  const submitComment = () => {
+  const submitComment = async () => {
     const text = commentDraft.trim()
-    if (!text) return
-    onUpdate(node.id, {
-      comments: [
-        ...node.comments,
-        {
-          id: `c${Date.now()}`,
-          authorId: CURRENT_USER.id,
-          content: text,
-          createdAt: new Date().toISOString().slice(0, 10),
-        },
-      ],
-    })
-    setCommentDraft("")
+    if (!text || submittingComment) return
+    setSubmittingComment(true)
+    try {
+      await onAddComment(node.id, text)
+      setCommentDraft("")
+    } finally {
+      setSubmittingComment(false)
+    }
   }
 
   return (
@@ -128,16 +134,18 @@ export function NodeDetailPanel({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onAddChild}
-            aria-label="添加子节点"
-            title="添加子节点"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          {!isRoot && (
+          {canManageNodes && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onAddChild}
+              aria-label="添加子节点"
+              title="添加子节点"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          )}
+          {canManageNodes && !isRoot && (
             <Button
               variant="ghost"
               size="icon-sm"
@@ -161,6 +169,7 @@ export function NodeDetailPanel({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={saveTitle}
+          readOnly={!canManageNodes}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault()
@@ -177,6 +186,7 @@ export function NodeDetailPanel({
           onChange={(e) => setDescription(e.target.value)}
           onBlur={saveDescription}
           rows={3}
+          readOnly={!canManageNodes}
           placeholder="添加描述..."
           className="mt-2 resize-none border-transparent bg-transparent px-0 text-sm text-muted-foreground shadow-none focus-visible:border-input focus-visible:px-2 focus-visible:py-1"
           aria-label="节点描述"
@@ -189,6 +199,7 @@ export function NodeDetailPanel({
             <Select
               value={node.status}
               onValueChange={(v) => onStatusChange(node.id, v as NodeStatus)}
+              disabled={!canEdit}
             >
               <SelectTrigger className="mt-1.5 h-8 w-full">
                 <SelectValue>
@@ -221,6 +232,7 @@ export function NodeDetailPanel({
             <Select
               value={node.priority}
               onValueChange={(v) => onUpdate(node.id, { priority: v as TreeNode["priority"] })}
+              disabled={!canManageNodes}
             >
               <SelectTrigger className="mt-1.5 h-8 w-full">
                 <SelectValue>
@@ -252,7 +264,7 @@ export function NodeDetailPanel({
             </label>
             <span className="text-sm font-semibold tabular-nums">{progress}%</span>
           </div>
-          {isLeaf ? (
+          {isLeaf && canEdit ? (
             <div className="mt-3">
               <div className="flex items-center gap-2">
                 <Button
@@ -303,10 +315,12 @@ export function NodeDetailPanel({
           ) : (
             <>
               <Progress value={progress} className="mt-2 h-2" />
-              <p className="mt-2 text-xs text-muted-foreground">
-                共 {stats.total} 个子节点，已完成 {stats.done} 个
-                {stats.blocked > 0 && `，${stats.blocked} 个阻塞`}
-              </p>
+              {!isLeaf && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  共 {stats.total} 个子节点，已完成 {stats.done} 个
+                  {stats.blocked > 0 && `，${stats.blocked} 个阻塞`}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -315,23 +329,25 @@ export function NodeDetailPanel({
         <div className="mt-5 space-y-3 rounded-lg border border-border p-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">详细信息</span>
-            <button
-              type="button"
-              onClick={() => setEditingMeta((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {editingMeta ? (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  完成
-                </>
-              ) : (
-                <>
-                  <Pencil className="h-3.5 w-3.5" />
-                  编辑
-                </>
-              )}
-            </button>
+            {canManageNodes && (
+              <button
+                type="button"
+                onClick={() => setEditingMeta((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {editingMeta ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    完成
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-3.5 w-3.5" />
+                    编辑
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {editingMeta ? (
@@ -422,11 +438,19 @@ export function NodeDetailPanel({
         <div className="mt-5">
           <label className="text-xs font-medium text-muted-foreground">负责人</label>
           <div className="mt-2">
-            <AssigneePicker
-              members={members}
-              value={node.assigneeIds}
-              onChange={(ids) => onUpdate(node.id, { assigneeIds: ids })}
-            />
+            {canManageNodes ? (
+              <AssigneePicker
+                members={members}
+                value={node.assigneeIds}
+                onChange={(ids) => onUpdate(node.id, { assigneeIds: ids })}
+              />
+            ) : (
+              <p className="text-sm">
+                {node.assigneeIds.length
+                  ? node.assigneeIds.map((id) => resolveUser(members, id).name).join("、")
+                  : "未指派"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -470,23 +494,25 @@ export function NodeDetailPanel({
       </div>
 
       {/* 评论输入 */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-end gap-2">
-          <Textarea
-            value={commentDraft}
-            onChange={(e) => setCommentDraft(e.target.value)}
-            placeholder="添加评论..."
-            rows={1}
-            className="min-h-9 resize-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitComment()
-            }}
-          />
-          <Button size="icon" onClick={submitComment} aria-label="发送">
-            <Send className="h-4 w-4" />
-          </Button>
+      {canComment && (
+        <div className="border-t border-border p-3">
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={commentDraft}
+              onChange={(e) => setCommentDraft(e.target.value)}
+              placeholder="添加评论..."
+              rows={1}
+              className="min-h-9 resize-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitComment()
+              }}
+            />
+            <Button size="icon" onClick={submitComment} aria-label="发送" disabled={submittingComment}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }

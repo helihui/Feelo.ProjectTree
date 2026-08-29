@@ -1,9 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["better-auth", "@better-auth/kysely-adapter", "kysely"],
-  typescript: {
-    ignoreBuildErrors: true,
+  output: "standalone",
+  experimental: {
+    cpus: 2,
   },
+  serverExternalPackages: ["better-auth", "@better-auth/kysely-adapter", "kysely"],
   images: {
     unoptimized: true,
   },

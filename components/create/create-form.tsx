@@ -113,7 +113,7 @@ export function CreateForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>拆解深度</Label>
-              <Select value={depth} onValueChange={setDepth}>
+              <Select value={depth} onValueChange={(v) => v && setDepth(v)}>
                 <SelectTrigger>
                   <SelectValue>
                     {(v: string) => DEPTH_OPTIONS.find((o) => o.value === v)?.label}

@@ -153,13 +153,14 @@ function blueprintToTree(bp: BlueprintNode, depth: number): TreeNode {
 export interface GenerateInput {
   name: string
   requirement: string
-  template: "product" | "tech" | "marketing"
+  template?: "product" | "tech" | "marketing"
+  style: "balanced" | "agile" | "waterfall"
   depth: number
 }
 
 /** 模拟 AI 拆解：基于模板蓝图生成树 */
 export function mockGenerateTree(input: GenerateInput): TreeNode {
-  const blueprint = BLUEPRINTS[input.template] ?? BLUEPRINTS.product
+  const blueprint = BLUEPRINTS[input.template ?? "product"] ?? BLUEPRINTS.product
   return {
     id: gid(),
     title: input.name || "未命名项目",

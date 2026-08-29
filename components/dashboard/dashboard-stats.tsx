@@ -1,43 +1,35 @@
 import { Card } from "@/components/ui/card"
-import { PROJECTS } from "@/lib/data"
-import { computeStats, computeProgress } from "@/lib/tree-utils"
+import { getDashboardOverview } from "@/lib/queries/dashboard"
 import { FolderTree, CircleCheck, CircleDashed, OctagonAlert } from "lucide-react"
 
-export function DashboardStats() {
-  const allStats = PROJECTS.map((p) => computeStats(p.root))
-  const totalNodes = allStats.reduce((s, x) => s + x.total, 0)
-  const doneNodes = allStats.reduce((s, x) => s + x.done, 0)
-  const progressNodes = allStats.reduce((s, x) => s + x.progress, 0)
-  const blockedNodes = allStats.reduce((s, x) => s + x.blocked, 0)
-  const avgProgress = Math.round(
-    PROJECTS.reduce((s, p) => s + computeProgress(p.root), 0) / PROJECTS.length,
-  )
+export async function DashboardStats() {
+  const o = await getDashboardOverview()
 
   const stats = [
     {
       label: "进行中项目",
-      value: PROJECTS.length,
-      sub: `平均完成度 ${avgProgress}%`,
+      value: o.projectCount,
+      sub: `平均完成度 ${o.avgProgress}%`,
       icon: FolderTree,
       tint: "text-primary",
     },
     {
       label: "已完成节点",
-      value: doneNodes,
-      sub: `共 ${totalNodes} 个任务节点`,
+      value: o.doneNodes,
+      sub: `共 ${o.totalNodes} 个任务节点`,
       icon: CircleCheck,
       tint: "text-status-done-foreground",
     },
     {
       label: "进行中节点",
-      value: progressNodes,
+      value: o.progressNodes,
       sub: "正在推进",
       icon: CircleDashed,
       tint: "text-status-progress-foreground",
     },
     {
       label: "阻塞节点",
-      value: blockedNodes,
+      value: o.blockedNodes,
       sub: "需优先处理",
       icon: OctagonAlert,
       tint: "text-status-blocked-foreground",

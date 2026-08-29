@@ -1,9 +1,23 @@
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
+import { setDefaultResultOrder } from "node:dns"
 import * as schema from "./schema"
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+// Node 默认优先解析 IPv6，部分网络下连接 Neon 会在 TLS 握手后被中断，强制走 IPv4。
+setDefaultResultOrder("ipv4first")
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,
+  // 保留空闲连接，避免每次请求都重新走 TLS 握手（对 Neon 这类远端库影响明显）
+  idleTimeoutMillis: 60_000,
+  connectionTimeoutMillis: 10_000,
+  keepAlive: true,
+})
 export const db = drizzle(pool, { schema })
+
+// 预热首个数据库连接，减少冷启动时第一条认证/项目请求的握手耗时。
+void pool.query("SELECT 1").catch(() => {})
 
 let schemaPromise: Promise<void> | null = null
 
@@ -22,6 +36,29 @@ export async function ensureSchema(): Promise<void> {
           "color" text NOT NULL,
           "email" text,
           "role" text NOT NULL DEFAULT '成员',
+          "roleKey" text NOT NULL DEFAULT 'member',
+          "userId" text,
+          "createdAt" timestamp NOT NULL DEFAULT now()
+        )
+      `)
+
+      // 兼容已存在的旧库
+      await client.query(`
+        ALTER TABLE "members"
+        ADD COLUMN IF NOT EXISTS "roleKey" text NOT NULL DEFAULT 'member'
+      `)
+      await client.query(`
+        ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "userId" text
+      `)
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "invitations" (
+          "token" text PRIMARY KEY,
+          "memberId" text NOT NULL,
+          "email" text NOT NULL,
+          "roleKey" text NOT NULL DEFAULT 'member',
+          "expiresAt" timestamp NOT NULL,
+          "acceptedAt" timestamp,
           "createdAt" timestamp NOT NULL DEFAULT now()
         )
       `)
@@ -114,6 +151,75 @@ export async function ensureSchema(): Promise<void> {
           "createdAt" timestamp DEFAULT now(),
           "updatedAt" timestamp DEFAULT now()
         )
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_members_createdAt"
+        ON "members" ("createdAt")
+      `)
+
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_members_userId"
+        ON "members" ("userId") WHERE "userId" IS NOT NULL
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_projects_createdAt"
+        ON "projects" ("createdAt")
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_nodes_project_sort_created"
+        ON "nodes" ("projectId", "sortOrder", "createdAt")
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_nodes_project_parent"
+        ON "nodes" ("projectId", "parentId")
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_session_userId"
+        ON "session" ("userId")
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_account_userId"
+        ON "account" ("userId")
+      `)
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "node_comments" (
+          "id" text PRIMARY KEY,
+          "nodeId" text NOT NULL,
+          "projectId" text NOT NULL,
+          "authorId" text NOT NULL,
+          "content" text NOT NULL,
+          "createdAt" timestamp NOT NULL DEFAULT now()
+        )
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_node_comments_node_created"
+        ON "node_comments" ("nodeId", "createdAt")
+      `)
+
+      // 最近活动按时间倒序取前 N 条
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_node_comments_created"
+        ON "node_comments" ("createdAt" DESC)
+      `)
+
+      // 「我的待办」按负责人过滤（jsonb 包含查询）
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_nodes_assignees"
+        ON "nodes" USING gin ("assigneeIds")
+      `)
+
+      // 邀请按成员查询有效邀请
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_invitations_member"
+        ON "invitations" ("memberId")
       `)
 
       await client.query("COMMIT")

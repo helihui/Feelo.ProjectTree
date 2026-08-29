@@ -81,6 +81,7 @@ export function TreeNodeRow(props: Props) {
   const isCollapsed = collapsed.has(node.id)
   const isSelected = selectedId === node.id
   const progress = computeProgress(node)
+  const stats = hasChildren ? computeStats(node) : null
   const meta = STATUS_META[node.status]
   const StatusIcon = STATUS_ICON[node.status]
   const dimmed = matchedIds !== null && !isMatch(node)
@@ -172,9 +173,9 @@ export function TreeNodeRow(props: Props) {
 
         {/* 右侧：进度 + 负责人 */}
         <div className="z-10 flex shrink-0 items-center gap-3">
-          {hasChildren && (
+          {stats && (
             <span className="hidden text-[11px] text-muted-foreground sm:inline">
-              {computeStats(node).done}/{computeStats(node).total}
+              {stats.done}/{stats.total}
             </span>
           )}
           <div className="hidden w-24 items-center gap-2 md:flex">

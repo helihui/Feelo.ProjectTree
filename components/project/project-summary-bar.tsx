@@ -1,17 +1,18 @@
-import type { Project, TreeNode } from "@/lib/types"
-import { computeProgress, computeStats } from "@/lib/tree-utils"
+import type { Project, TreeNode, User } from "@/lib/types"
+import { computeProgress, computeStats, resolveUser } from "@/lib/tree-utils"
 import { Progress } from "@/components/ui/progress"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { getUser } from "@/lib/data"
 import { STATUS_META } from "@/lib/tree-utils"
 import { cn } from "@/lib/utils"
 
 export function ProjectSummaryBar({
   root,
   project,
+  members,
 }: {
   root: TreeNode
   project: Project
+  members: User[]
 }) {
   const progress = computeProgress(root)
   const stats = computeStats(root)
@@ -54,7 +55,7 @@ export function ProjectSummaryBar({
           <span className="text-xs text-muted-foreground">团队成员</span>
           <div className="mt-1 flex -space-x-2">
             {project.memberIds.map((id) => {
-              const u = getUser(id)
+              const u = resolveUser(members, id)
               return (
                 <Avatar key={id} className="h-7 w-7 border-2 border-background">
                   <AvatarFallback

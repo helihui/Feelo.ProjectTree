@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { AppShell, PageHeader } from "@/components/app-shell"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
@@ -22,7 +21,7 @@ import { FileText, Pencil, Variable } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
-export default function PromptsPage() {
+export function PromptsView() {
   const [templates, setTemplates] = useState<PromptTemplate[]>(seed)
   const [editing, setEditing] = useState<PromptTemplate | null>(null)
   const [draft, setDraft] = useState("")
@@ -51,11 +50,7 @@ export default function PromptsPage() {
   }
 
   return (
-    <AppShell>
-      <PageHeader
-        title="Prompt 模板"
-        description="管理各业务场景的提示词模板，支持变量占位与启用开关。"
-      />
+    <>
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2">
           {templates.map((t) => (
@@ -140,6 +135,6 @@ export default function PromptsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    </>
   )
 }

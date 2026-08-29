@@ -8,8 +8,6 @@ export const USERS: User[] = [
   { id: "u5", name: "李娜", initials: "LN", color: "oklch(0.6 0.2 25)" },
 ]
 
-export const CURRENT_USER = USERS[0]
-
 let idCounter = 0
 const nid = () => `n${++idCounter}`
 
@@ -633,6 +631,581 @@ export const PROJECTS: Project[] = [
   },
 ]
 
+PROJECTS.push(buildFeeloProject())
+
+function createFeeloNode(
+  title: string,
+  description: string,
+  options?: {
+    type?: "milestone" | "phase" | "epic" | "module" | "task" | "subtask"
+    status?: "todo" | "progress" | "done" | "blocked" | "paused"
+    priority?: "low" | "medium" | "high" | "urgent"
+    progress?: number
+    assigneeIds?: string[]
+    startDate?: string | null
+    dueDate?: string | null
+    estimateHours?: number
+    tags?: string[]
+    children?: import("./types").TreeNode[]
+  },
+) {
+  return {
+    id: nid(),
+    title,
+    description,
+    type: options?.type ?? "task",
+    status: options?.status ?? "todo",
+    priority: options?.priority ?? "medium",
+    progress: options?.progress ?? 0,
+    assigneeIds: options?.assigneeIds ?? [],
+    startDate: options?.startDate ?? null,
+    dueDate: options?.dueDate ?? null,
+    estimateHours: options?.estimateHours ?? 0,
+    tags: options?.tags ?? [],
+    comments: [],
+    aiGenerated: true,
+    children: options?.children ?? [],
+  }
+}
+
+function buildFeeloProject(): Project {
+  const overview = createFeeloNode(
+    "项目总览",
+    "不是普通脑图，而是围绕灵绘 Feelo 的项目操作系统，负责统一项目结构、业务推进、资料沉淀和决策辅助。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u1", "u2"],
+      startDate: "2026-06-06",
+      dueDate: "2026-06-30",
+      tags: ["定位", "项目系统"],
+      children: [
+        createFeeloNode(
+          "工具定位与边界",
+          "定义它覆盖项目结构梳理、产品拆解、业务分析、任务推进、资料管理和 AI 辅助，不做轻量纯展示脑图。",
+          {
+            type: "task",
+            status: "done",
+            priority: "urgent",
+            progress: 100,
+            assigneeIds: ["u1"],
+            estimateHours: 12,
+            tags: ["定位"],
+          },
+        ),
+        createFeeloNode(
+          "灵绘 Feelo 业务地图",
+          "统一纳入云学官网、AI 生成剧本、自媒体公众号、商单生图、名片图、分镜转视频、电商生图、ERP、儿童英语学习卡、API 代理。",
+          {
+            type: "task",
+            status: "progress",
+            priority: "high",
+            progress: 60,
+            assigneeIds: ["u1", "u5"],
+            estimateHours: 18,
+            tags: ["业务地图"],
+          },
+        ),
+        createFeeloNode(
+          "核心目标与度量",
+          "建立项目数、验证状态、现金流、内容产出、商机转化和开发进度等核心指标，支撑管理看板。",
+          {
+            type: "task",
+            status: "todo",
+            priority: "high",
+            assigneeIds: ["u1", "u3"],
+            estimateHours: 16,
+            tags: ["指标"],
+          },
+        ),
+      ],
+    },
+  )
+
+  const productLines = createFeeloNode(
+    "产品线管理",
+    "按产品线组织脑图，把每条业务线拆成定位、用户、流程、商业、推广、风险和当前状态，便于持续推进。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u1", "u5"],
+      startDate: "2026-06-07",
+      dueDate: "2026-07-05",
+      tags: ["产品矩阵"],
+      children: [
+        createFeeloNode(
+          "产品矩阵盘点",
+          "把十条业务线全部纳入统一项目树，节点直接承载目标、状态、资料链接和负责人。",
+          {
+            type: "task",
+            status: "progress",
+            priority: "urgent",
+            progress: 50,
+            assigneeIds: ["u1", "u5"],
+            estimateHours: 24,
+            tags: ["矩阵"],
+            children: [
+              createFeeloNode("云学官网", "官网作为品牌入口，挂载落地页、案例、定价和线索收集。", { type: "subtask", tags: ["官网"] }),
+              createFeeloNode("AI 生成剧本", "面向内容生产的剧本生成产品，重点看脚本质量与分发渠道。", { type: "subtask", tags: ["AI", "内容"] }),
+              createFeeloNode("自媒体公众号", "内容资产与流量入口，绑定选题、封面、文章和复盘。", { type: "subtask", tags: ["公众号"] }),
+              createFeeloNode("灵绘商单生图面向 C 端", "偏现金流业务，强调下单链路、出图质量和复购。", { type: "subtask", tags: ["C端", "现金流"] }),
+              createFeeloNode("灵绘名片图面向 B 端", "偏企业交付，关注销售流程、模板复用和客单价。", { type: "subtask", tags: ["B端"] }),
+              createFeeloNode("分镜图转视频", "连接图片和视频产线，适合挂流程、素材、脚本和审核。", { type: "subtask", tags: ["视频"] }),
+              createFeeloNode("电商生图 / 产品图", "围绕产品图、详情页和投放素材展开，适合图片流程化管理。", { type: "subtask", tags: ["电商"] }),
+              createFeeloNode("ERP 定制", "定制化项目，强调需求评审、实施周期和里程碑。", { type: "subtask", status: "paused", tags: ["定制"] }),
+              createFeeloNode("儿童英语学习卡", "内容产品，覆盖课程逻辑、卡片设计、打印与销售渠道。", { type: "subtask", tags: ["教育"] }),
+              createFeeloNode("API / 中转站代理", "技术和商业双属性业务，关注稳定性、计费、渠道与风控。", { type: "subtask", status: "blocked", tags: ["API"] }),
+            ],
+          },
+        ),
+        createFeeloNode(
+          "产品线生命周期",
+          "为每条业务线维护已验证、待验证、暂停、放弃、高潜力、低优先级等状态，并记录切换原因。",
+          {
+            type: "task",
+            status: "todo",
+            priority: "high",
+            assigneeIds: ["u1"],
+            estimateHours: 10,
+            tags: ["状态"],
+          },
+        ),
+        createFeeloNode(
+          "产品线协同关系",
+          "表达官网引流、自媒体获客、AI 生成内容、电商素材、B 端交付和 API 能力复用之间的依赖关系。",
+          {
+            type: "task",
+            status: "todo",
+            priority: "medium",
+            assigneeIds: ["u2", "u5"],
+            estimateHours: 14,
+            tags: ["依赖"],
+          },
+        ),
+      ],
+    },
+  )
+
+  const businessModel = createFeeloNode(
+    "业务模型拆解",
+    "让每个项目节点不只停留在结构表达，而是直接沉淀商业模式、成本利润和增长逻辑。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "high",
+      assigneeIds: ["u1", "u5"],
+      tags: ["商业分析"],
+      children: [
+        createFeeloNode(
+          "收益模型",
+          "按订阅、单次付费、企业定制、API 调用、代运营服务等方式拆分收费逻辑并挂到产品线节点。",
+          { type: "task", priority: "high", tags: ["营收"] },
+        ),
+        createFeeloNode(
+          "获客路径",
+          "梳理官网 SEO、公众号、视频号、短视频、私域、代理渠道和老客户转介绍等获客方式。",
+          { type: "task", priority: "high", tags: ["获客"] },
+        ),
+        createFeeloNode(
+          "成本与利润结构",
+          "记录模型调用成本、人工修图成本、设计成本、投放成本、交付周期与利润空间，用于业务优先级打分。",
+          { type: "task", priority: "urgent", tags: ["利润", "成本"] },
+        ),
+      ],
+    },
+  )
+
+  const editing = createFeeloNode(
+    "脑图编辑能力",
+    "支持结构化编辑、手绘批注、状态标记和跨视图切换，解决普通脑图难以直接拿来推进项目的问题。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u2", "u3"],
+      tags: ["编辑器"],
+      children: [
+        createFeeloNode(
+          "节点结构编辑",
+          "支持新增、折叠、拖拽、复制、批量移动、引用子树和模板插入，保证大项目树可持续维护。",
+          { type: "task", status: "progress", priority: "high", progress: 40, tags: ["节点"] },
+        ),
+        createFeeloNode(
+          "笔画 / 手绘标记功能",
+          "用户可在节点、图片、流程图上直接手绘红笔批注、圈重点、打叉、箭头、手写备注、区域框选、涂抹、高亮与待优化标记。",
+          {
+            type: "task",
+            status: "todo",
+            priority: "urgent",
+            assigneeIds: ["u2", "u3"],
+            estimateHours: 40,
+            tags: ["手绘", "批注"],
+            children: [
+              createFeeloNode("评审批注层", "用于产品经理评审、创始人战略梳理和技术需求交接，支持批注颜色、图层开关和历史保留。", { type: "subtask", tags: ["评审"] }),
+              createFeeloNode("业务状态手绘标记", "支持对某条业务线直接手绘标注暂停、放弃、待验证和高风险，避免状态只停留在文字里。", { type: "subtask", tags: ["业务状态"] }),
+              createFeeloNode("节点高亮与待优化标记", "对功能节点打高亮和优化标签，帮助快速输出需求修订单和研发改造清单。", { type: "subtask", tags: ["优化"] }),
+            ],
+          },
+        ),
+        createFeeloNode(
+          "视图模式",
+          "同一棵树支持脑图视图、流程视图、列表视图和看板视图，便于管理层、产品、研发、运营各自使用。",
+          { type: "task", priority: "high", tags: ["多视图"] },
+        ),
+      ],
+    },
+  )
+
+  const media = createFeeloNode(
+    "多媒体能力",
+    "图片、小图标、状态标签和音视频素材不是附件，而是能参与项目流转和 AI 分析的核心对象。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "urgent",
+      assigneeIds: ["u2", "u4"],
+      tags: ["多媒体"],
+      children: [
+        createFeeloNode(
+          "小图标 / 小图功能",
+          "节点旁支持产品图标、业务图标、头像、状态、风险、钱袋、视频、图片、文档、API、AI 等图标和状态标签。",
+          {
+            type: "task",
+            priority: "high",
+            tags: ["图标", "状态"],
+            children: [
+              createFeeloNode("类型识别", "快速区分产品、内容、技术、商业、运营节点，降低阅读成本。", { type: "subtask", tags: ["识别"] }),
+              createFeeloNode("状态识别", "用已完成、进行中、暂停、放弃、高风险标识快速判断推进状态。", { type: "subtask", tags: ["状态"] }),
+              createFeeloNode("优先级识别", "配合风险和钱袋图标判断轻重缓急与现金流价值。", { type: "subtask", tags: ["优先级"] }),
+            ],
+          },
+        ),
+        createFeeloNode(
+          "图片加入脑图流程",
+          "图片可作为节点、流程步骤、参考图、需求输入、最终产出，并支持批注、AI 识别、生成子节点、生成说明和任务清单。",
+          {
+            type: "task",
+            priority: "urgent",
+            tags: ["图片流程"],
+            children: [
+              createFeeloNode("图片驱动流程", "支持参考图 -> AI 生成图 -> 人工批注 -> 再生成 -> 审核 -> 发布的标准流程拖拽编排。", { type: "subtask", tags: ["工作流"] }),
+              createFeeloNode("图片对比与版本", "支持两个版本并排比较、差异批注和回滚，适合电商图、封面图和海报设计。", { type: "subtask", tags: ["版本"] }),
+              createFeeloNode("场景模板", "预置电商产品图、儿童英语学习卡、公众号封面、分镜转视频、商单生图、UI 截图和海报设计等流程模板。", { type: "subtask", tags: ["模板"] }),
+            ],
+          },
+        ),
+        createFeeloNode(
+          "多媒体资产库",
+          "统一沉淀封面图、商品图、视频草稿、案例图、提示词图和 UI 截图，避免素材散落在聊天和网盘中。",
+          { type: "task", priority: "medium", tags: ["素材库"] },
+        ),
+      ],
+    },
+  )
+
+  const links = createFeeloNode(
+    "链接与资料能力",
+    "每个节点都能绑定链接和资料，让脑图成为项目入口，而不是只能看结构的孤岛。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "high",
+      assigneeIds: ["u2", "u5"],
+      tags: ["资料"],
+      children: [
+        createFeeloNode(
+          "节点贴链接功能",
+          "支持网页、飞书、Notion、GitHub、设计稿、原型、接口文档、订单后台、文章、视频号、商品页、图片素材和 API 平台链接。",
+          {
+            type: "task",
+            priority: "urgent",
+            tags: ["链接"],
+            children: [
+              createFeeloNode("链接显示方式", "节点上用小图标和状态徽章展示链接类型，悬浮时显示链接卡片，点击后可跳转或在右侧详情栏预览。", { type: "subtask", tags: ["展示"] }),
+              createFeeloNode("链接预览与收藏", "为常用链接生成摘要卡片，减少反复打开外部系统查资料的成本。", { type: "subtask", tags: ["预览"] }),
+              createFeeloNode("内部跳转", "支持脑图内节点引用、跨项目跳转和资料反向索引，形成项目知识网络。", { type: "subtask", tags: ["内部链接"] }),
+            ],
+          },
+        ),
+        createFeeloNode(
+          "资料沉淀规范",
+          "规定节点必须挂需求说明、设计链接、执行文档、复盘记录和结论，保证资料可追溯。",
+          { type: "task", priority: "high", tags: ["规范"] },
+        ),
+        createFeeloNode(
+          "资料检索",
+          "按业务线、标签、链接类型、状态和负责人检索节点资料，服务内容生产和复盘。",
+          { type: "task", priority: "medium", tags: ["检索"] },
+        ),
+      ],
+    },
+  )
+
+  const ai = createFeeloNode(
+    "AI 辅助能力",
+    "AI 不只是生成脑图，而是参与整理、分析、评分、任务生成和商业判断，直接提升项目决策效率。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u1", "u3"],
+      tags: ["AI"],
+      children: [
+        createFeeloNode(
+          "AI 自动整理脑图",
+          "把杂乱节点重组为产品、业务、运营、技术、风险结构，自动发现重复节点、相似节点和缺失模块。",
+          { type: "task", status: "progress", priority: "urgent", progress: 35, tags: ["整理"] },
+        ),
+        createFeeloNode(
+          "AI 自动生成子节点",
+          "输入儿童英语学习卡、电商产品图或 API 代理等主题后，自动补出定位、人群、流程、推广、成本利润和风险点。",
+          { type: "task", priority: "urgent", tags: ["自动拆解"] },
+        ),
+        createFeeloNode(
+          "AI 自动生成流程图",
+          "把描述型节点直接转成流程，例如参考图 -> 生成图片 -> 修改提示词 -> 二次生成 -> 审核 -> 发布。",
+          { type: "task", priority: "high", tags: ["流程图"] },
+        ),
+        createFeeloNode(
+          "AI 自动分析业务优先级",
+          "结合成本、利润、现金流、开发难度、用户需求、竞争强度、可复制性、短视频适配度和直播适配度为业务线打分。",
+          { type: "task", priority: "urgent", tags: ["优先级评分"] },
+        ),
+        createFeeloNode(
+          "AI 自动生成任务与商业分析",
+          "从节点自动生成待办、负责人、截止时间、验收标准、风险提醒，并补齐目标用户、痛点、卖点、付费、获客、利润空间和 MVP 路径。",
+          { type: "task", priority: "urgent", tags: ["任务生成", "商业分析"] },
+        ),
+      ],
+    },
+  )
+
+  const workflow = createFeeloNode(
+    "流程与任务管理",
+    "把脑图中的节点转换成可跟踪的流程、任务和依赖网络，保证从想法到落地中间不丢信息。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u1", "u3", "u5"],
+      tags: ["任务", "流程"],
+      children: [
+        createFeeloNode(
+          "流程编排",
+          "支持节点转流程、流程转任务、里程碑校验和跨节点依赖，适合产品需求、图片生产和内容发布。",
+          { type: "task", status: "progress", priority: "high", progress: 45, tags: ["编排"] },
+        ),
+        createFeeloNode(
+          "任务流转",
+          "支持待办、进行中、待审核、已完成、暂停、放弃状态，以及负责人、截止时间和验收标准管理。",
+          { type: "task", priority: "urgent", tags: ["流转"] },
+        ),
+        createFeeloNode(
+          "风险与阻塞管理",
+          "将风险节点单独挂出，标识阻塞原因、影响范围、应对方案和恢复条件。",
+          { type: "task", priority: "high", tags: ["风险"] },
+        ),
+      ],
+    },
+  )
+
+  const brief = createFeeloNode(
+    "文本简报生成",
+    "从脑图自动抽取结构、状态、任务、资料和结论，生成不同角色可直接使用的简报和说明文档。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "urgent",
+      assigneeIds: ["u2", "u5"],
+      tags: ["简报"],
+      children: [
+        createFeeloNode(
+          "信息抽取规则",
+          "从项目总览、业务状态、任务节点、风险节点、资料链接和评论结论中自动抽取简报内容。",
+          { type: "task", priority: "high", tags: ["抽取"] },
+        ),
+        createFeeloNode(
+          "多角色版本生成",
+          "支持项目日报、周报、产品规划、商业模式、技术开发、运营推广、风险分析、投资人汇报、执行清单和设计说明等版本。",
+          { type: "task", priority: "urgent", tags: ["多角色"] },
+        ),
+        createFeeloNode(
+          "多格式输出",
+          "支持短版、长版、表格版、微信公众号版和 PPT 大纲版，并能保留脑图节点链接回溯来源。",
+          { type: "task", priority: "high", tags: ["多格式"] },
+        ),
+      ],
+    },
+  )
+
+  const collaboration = createFeeloNode(
+    "团队协作",
+    "围绕项目树进行评论、批注、审批和角色协作，让脑图成为团队共同工作的主界面。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "high",
+      assigneeIds: ["u1", "u2", "u4"],
+      tags: ["协作"],
+      children: [
+        createFeeloNode(
+          "角色协同",
+          "区分创始人、产品经理、设计、研发、运营和销售的查看/编辑/审批权限，让不同团队在同一棵树里协同。",
+          { type: "task", priority: "high", tags: ["权限"] },
+        ),
+        createFeeloNode(
+          "评论与批注",
+          "在节点、图片和流程上直接评论、@人、附截图和批注，减少群聊来回确认。",
+          { type: "task", priority: "high", tags: ["评论"] },
+        ),
+        createFeeloNode(
+          "版本与审批",
+          "保留结构调整、状态切换、批注修改和决策记录，关键节点支持审批流。",
+          { type: "task", priority: "medium", tags: ["版本", "审批"] },
+        ),
+      ],
+    },
+  )
+
+  const analytics = createFeeloNode(
+    "数据与看板",
+    "把项目树里的结构化数据变成可读看板，用于管理推进、业务判断和资源调配。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "high",
+      assigneeIds: ["u1", "u3", "u5"],
+      tags: ["看板"],
+      children: [
+        createFeeloNode(
+          "项目健康度",
+          "按进度、阻塞、延期、风险和节点完成率展示项目健康度，用于管理层快速巡检。",
+          { type: "task", priority: "high", tags: ["健康度"] },
+        ),
+        createFeeloNode(
+          "业务线对比看板",
+          "横向比较现金流、利润率、投入产出、验证状态和增长潜力，辅助业务取舍。",
+          { type: "task", priority: "urgent", tags: ["业务对比"] },
+        ),
+        createFeeloNode(
+          "内容与转化看板",
+          "统计选题产出、封面点击、文章发布、短视频发布、商机线索和订单转化。",
+          { type: "task", priority: "medium", tags: ["内容数据"] },
+        ),
+      ],
+    },
+  )
+
+  const publish = createFeeloNode(
+    "导出与发布",
+    "让脑图结果可以对内交付、对外分享和转成不同场景可消费的材料。",
+    {
+      type: "epic",
+      status: "todo",
+      priority: "medium",
+      assigneeIds: ["u2", "u5"],
+      tags: ["导出"],
+      children: [
+        createFeeloNode(
+          "导出文档",
+          "支持导出脑图、任务清单、PRD、设计说明、周报和 PPT 大纲，用于开发和经营汇报。",
+          { type: "task", priority: "high", tags: ["文档"] },
+        ),
+        createFeeloNode(
+          "对外分享",
+          "支持分享项目只读链接、客户可见方案页和案例演示页，适合 B 端提案与商单沟通。",
+          { type: "task", priority: "medium", tags: ["分享"] },
+        ),
+        createFeeloNode(
+          "嵌入发布",
+          "可嵌入官网、飞书或 Notion 页面，统一项目对外展示入口。",
+          { type: "task", priority: "medium", tags: ["嵌入"] },
+        ),
+      ],
+    },
+  )
+
+  const feeloTemplate = createFeeloNode(
+    "灵绘 Feelo 项目专用模板",
+    "为灵绘 Feelo 预置产品矩阵、业务状态、图片生产、内容生产和商业化流程，开箱即可用于真实业务推进。",
+    {
+      type: "epic",
+      status: "progress",
+      priority: "urgent",
+      assigneeIds: ["u1", "u2", "u5"],
+      tags: ["专用模板"],
+      children: [
+        createFeeloNode(
+          "产品矩阵",
+          "沉淀商单生图、儿童英语学习卡、电商产品图、自媒体封面图、分镜转视频、企业定制生图和 API 中转代理的标准模板。",
+          { type: "task", status: "done", priority: "urgent", progress: 100, tags: ["矩阵模板"] },
+        ),
+        createFeeloNode(
+          "业务状态",
+          "预置已验证、待验证、暂停、放弃、高潜力、低优先级、现金流型和品牌长期型标签，用于管理取舍。",
+          { type: "task", status: "progress", priority: "high", progress: 70, tags: ["状态模板"] },
+        ),
+        createFeeloNode(
+          "图片生产流程",
+          "用户上传图片 -> AI 识别图片 -> 生成提示词 -> 生成图片 -> 用户批注 -> 二次修改 -> 导出结果 -> 生成案例 -> 发布宣传。",
+          { type: "task", priority: "urgent", tags: ["图片生产"] },
+        ),
+        createFeeloNode(
+          "内容生产流程",
+          "选题 -> 资料收集 -> 洗稿/重写 -> 配图 -> 排版 -> 发布 -> 数据复盘，适配公众号和短视频内容生产。",
+          { type: "task", priority: "high", tags: ["内容流程"] },
+        ),
+        createFeeloNode(
+          "商业化流程",
+          "产品包装 -> 定价 -> 落地页 -> 私域引流 -> 成交话术 -> 售后服务 -> 复购设计，形成完整成交闭环。",
+          { type: "task", priority: "high", tags: ["商业化"] },
+        ),
+      ],
+    },
+  )
+
+  return {
+    id: "p4",
+    name: "灵绘 Feelo 项目级脑图工具",
+    description:
+      "围绕灵绘 Feelo 构建的项目级脑图工具，把业务矩阵、产品拆解、图片流程、内容生产、商业分析和团队执行统一到一棵可执行项目树中。",
+    ownerId: "u1",
+    memberIds: ["u1", "u2", "u3", "u4", "u5"],
+    createdAt: "2026-06-06",
+    updatedAt: "2026-06-06",
+    root: createFeeloNode(
+      "项目级脑图工具",
+      "面向灵绘 Feelo 的项目操作系统，用脑图承载战略梳理、业务推进、内容生产、资料沉淀、AI 分析和协作执行。",
+      {
+        type: "milestone",
+        status: "progress",
+        priority: "urgent",
+        assigneeIds: ["u1"],
+        startDate: "2026-06-06",
+        dueDate: "2026-08-15",
+        tags: ["灵绘 Feelo", "项目操作系统"],
+        children: [
+          overview,
+          productLines,
+          businessModel,
+          editing,
+          media,
+          links,
+          ai,
+          workflow,
+          brief,
+          collaboration,
+          analytics,
+          publish,
+          feeloTemplate,
+        ],
+      },
+    ),
+  }
+}
+
 export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: "pt1",
@@ -735,53 +1308,3 @@ export const AI_MODELS: AIModel[] = [
   },
 ]
 
-export const ACTIVITIES: ActivityItem[] = [
-  {
-    id: "a1",
-    userId: "u3",
-    action: "完成了任务",
-    target: "用户服务",
-    projectId: "p1",
-    createdAt: "2026-06-04T09:20:00",
-  },
-  {
-    id: "a2",
-    userId: "u4",
-    action: "将节点标记为阻塞",
-    target: "视觉设计系统升级",
-    projectId: "p1",
-    createdAt: "2026-06-03T16:40:00",
-  },
-  {
-    id: "a3",
-    userId: "u2",
-    action: "更新了进度",
-    target: "核心交互设计",
-    projectId: "p1",
-    createdAt: "2026-06-03T11:05:00",
-  },
-  {
-    id: "a4",
-    userId: "u1",
-    action: "使用 AI 创建了项目",
-    target: "FEELO V2",
-    projectId: "p1",
-    createdAt: "2026-06-01T10:00:00",
-  },
-  {
-    id: "a5",
-    userId: "u5",
-    action: "评论了任务",
-    target: "用户研究与需求定义",
-    projectId: "p1",
-    createdAt: "2026-05-31T14:30:00",
-  },
-]
-
-export function getUser(id: string): User {
-  return USERS.find((u) => u.id === id) ?? USERS[0]
-}
-
-export function getProject(id: string): Project | undefined {
-  return PROJECTS.find((p) => p.id === id)
-}

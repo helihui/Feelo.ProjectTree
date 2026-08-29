@@ -1,8 +1,8 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authClient, signOut } from "@/lib/auth-client"
+import { authClient, useSession } from "@/lib/auth-client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,21 +11,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, Upload, LogOut } from "lucide-react"
 import { toast } from "sonner"
 
-type ProfileUser = { name: string; email: string; image: string | null }
-
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/)
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-export function ProfileView({ user }: { user: ProfileUser }) {
+export function ProfileView() {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+  const { data: session, isPending } = useSession()
+  const user = session?.user
 
   // 资料
-  const [name, setName] = useState(user.name)
-  const [image, setImage] = useState<string | null>(user.image)
+  const [name, setName] = useState("")
+  const [image, setImage] = useState<string | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
 
   // 密码
@@ -35,6 +35,19 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   const [savingPassword, setSavingPassword] = useState(false)
 
   const [signingOut, setSigningOut] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name ?? "")
+      setImage(user.image ?? null)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!isPending && !user) {
+      router.replace("/sign-in")
+    }
+  }, [isPending, router, user])
 
   function handlePickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -50,6 +63,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
+    if (!user) return
     setSavingProfile(true)
     try {
       const { error } = await authClient.updateUser({ name, image: image ?? undefined })
@@ -65,6 +79,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault()
+    if (!user) return
     if (newPassword !== confirmPassword) {
       toast.error("两次输入的新密码不一致")
       return
@@ -91,14 +106,30 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   async function handleSignOut() {
     setSigningOut(true)
     try {
-      await signOut()
+      const res = await fetch("/api/auth/sign-out", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      })
+      if (!res.ok) throw new Error("登出请求失败")
       toast.success("已退出登录")
-      router.push("/sign-in")
-      router.refresh()
+      window.location.assign("/sign-in")
     } catch {
       toast.error("退出失败，请重试")
       setSigningOut(false)
     }
+  }
+
+  if (isPending) {
+    return <ProfileSkeleton />
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
@@ -154,7 +185,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">邮箱</Label>
-              <Input id="email" value={user.email} disabled />
+              <Input id="email" value={user.email ?? ""} disabled />
               <p className="text-xs text-muted-foreground">邮箱不可修改。</p>
             </div>
 
@@ -234,6 +265,29 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      {[0, 1, 2].map((idx) => (
+        <Card key={idx}>
+          <CardHeader>
+            <div className="h-6 w-28 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-56 animate-pulse rounded bg-muted" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="h-20 w-full animate-pulse rounded-xl bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded-md bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded-md bg-muted" />
+              <div className="h-9 w-24 animate-pulse rounded-md bg-muted" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

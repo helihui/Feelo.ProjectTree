@@ -12,6 +12,7 @@ import {
   Settings,
   GitBranch,
   KeyRound,
+  BookOpen,
   Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -51,6 +52,7 @@ export function Sidebar({
         ]
       : []),
     { href: "/api-keys", label: "API 密钥", icon: KeyRound },
+    { href: "/mcp-docs", label: "MCP 对接文档", icon: BookOpen },
   ]
 
   const isActive = (href: string) =>

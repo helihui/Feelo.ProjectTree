@@ -154,7 +154,7 @@ http://localhost:3000/api/db/stats?seed=1
 
 `POST /api/mcp` 以 MCP（协议版本 `2026-07-28`）对外开放 16 个工具，覆盖项目与任务树的增删改查、批量推进进度、成员与评论。鉴权用 `x-api-key`，密钥在 `/api-keys` 页面自助签发，权限为「成员角色 ∩ 密钥 scope」。
 
-第三方接入请看 [docs/MCP-对接指南.md](./docs/MCP-对接指南.md)。
+第三方接入请看 [public/docs/MCP-对接指南.md](./public/docs/MCP-对接指南.md)，登录后也可在「配置 → MCP 对接文档」页面在线阅读。
 
 ## 部署与外部资源
 

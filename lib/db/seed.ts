@@ -64,22 +64,28 @@ export async function ensureSeeded(): Promise<void> {
       db.selectDistinct({ projectId: nodes.projectId }).from(nodes),
     ])
 
-    const memberIds = new Set(existingMembers.map((m) => m.id))
     const projectIds = new Set(existingProjects.map((p) => p.id))
     const nodeProjectIds = new Set(existingNodeProjects.map((n) => n.projectId))
 
-    const missingMembers = USERS.filter((u) => !memberIds.has(u.id)).map((u) => ({
-      id: u.id,
-      name: u.name,
-      initials: u.initials,
-      color: u.color,
-      email: EMAIL_BY_ID[u.id] ?? null,
-      role: ROLE_BY_ID[u.id] ?? "成员",
-    }))
-
-    if (missingMembers.length > 0) {
-      await db.insert(members).values(missingMembers).onConflictDoNothing()
+    // 示例成员只在成员表为空时播种一次，否则用户删除的示例成员会在下次启动复活
+    if (existingMembers.length === 0) {
+      await db
+        .insert(members)
+        .values(
+          USERS.map((u) => ({
+            id: u.id,
+            name: u.name,
+            initials: u.initials,
+            color: u.color,
+            email: EMAIL_BY_ID[u.id] ?? null,
+            role: ROLE_BY_ID[u.id] ?? "成员",
+          })),
+        )
+        .onConflictDoNothing()
     }
+
+    // 示例项目只在项目表为空时播种一次，否则用户删除的示例项目会在下次启动复活
+    if (existingProjects.length > 0) return
 
     for (const p of PROJECTS) {
       if (!projectIds.has(p.id)) {

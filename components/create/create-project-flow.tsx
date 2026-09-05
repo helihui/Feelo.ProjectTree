@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import type { TreeNode } from "@/lib/types"
 import { mockGenerateTree, type GenerateInput } from "@/lib/mock-ai"
+import { createProject } from "@/app/actions/projects"
 import { CreateForm } from "./create-form"
 import { GeneratingView } from "./generating-view"
 import { PreviewTree } from "./preview-tree"
@@ -16,6 +17,7 @@ export function CreateProjectFlow() {
   const [stage, setStage] = useState<Stage>("form")
   const [input, setInput] = useState<GenerateInput | null>(null)
   const [tree, setTree] = useState<TreeNode | null>(null)
+  const [saving, startSaving] = useTransition()
 
   const handleSubmit = (data: GenerateInput) => {
     setInput(data)
@@ -34,11 +36,20 @@ export function CreateProjectFlow() {
   }
 
   const handleConfirm = () => {
-    toast.success("项目已创建", {
-      description: "（演示）树形结构已生成，正在跳转到项目页。",
+    if (!tree || !input) return
+    startSaving(async () => {
+      try {
+        const projectId = await createProject({
+          name: input.name,
+          description: input.requirement,
+          tree,
+        })
+        toast.success("项目已创建")
+        router.push(`/projects/${projectId}`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "创建失败，请重试")
+      }
     })
-    // 演示：跳转到示例项目
-    setTimeout(() => router.push("/projects/p1"), 800)
   }
 
   return (
@@ -52,6 +63,7 @@ export function CreateProjectFlow() {
       {stage === "preview" && tree && (
         <PreviewTree
           tree={tree}
+          saving={saving}
           onBack={() => setStage("form")}
           onRegenerate={handleRegenerate}
           onConfirm={handleConfirm}

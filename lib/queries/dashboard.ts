@@ -22,6 +22,7 @@ export interface ProjectCard {
   id: string
   name: string
   description: string
+  ownerId: string | null
   aiGenerated: boolean
   progress: number
   total: number
@@ -125,13 +126,15 @@ export const getDashboardOverview = unstable_cache(
 )
 
 /** 项目卡片列表：项目行 + 聚合统计 + 成员头像，一条 SQL */
-export const getProjectCards = unstable_cache(
-  async (limit = 4): Promise<ProjectCard[]> => {
-    await ensureSeeded()
-    const { rows } = await db.execute<{
+export async function getProjectCards(limit = 4): Promise<ProjectCard[]> {
+  const load = unstable_cache(
+    async (): Promise<ProjectCard[]> => {
+      await ensureSeeded()
+      const { rows } = await db.execute<{
       id: string
       name: string
       description: string
+      ownerid: string | null
       aigenerated: boolean
       progress: number
       total: number
@@ -153,7 +156,7 @@ export const getProjectCards = unstable_cache(
         FROM leaves GROUP BY "projectId"
       )
       SELECT
-        p."id", p."name", p."description",
+        p."id", p."name", p."description", p."ownerId" AS "ownerid",
         COALESCE(r."aiGenerated", false) AS "aigenerated",
         COALESCE(prog."progress", 0) AS "progress",
         COALESCE(agg."total", 0) AS "total",
@@ -170,13 +173,14 @@ export const getProjectCards = unstable_cache(
       LEFT JOIN agg ON agg."projectId" = p."id"
       LEFT JOIN prog ON prog."projectId" = p."id"
       LEFT JOIN "nodes" r ON r."projectId" = p."id" AND r."parentId" IS NULL
-      ORDER BY p."createdAt" ASC
+      ORDER BY p."createdAt" DESC
       LIMIT ${limit}
     `)
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
       description: r.description,
+      ownerId: r.ownerid ?? null,
       aiGenerated: !!r.aigenerated,
       progress: Number(r.progress),
       total: Number(r.total),
@@ -184,10 +188,12 @@ export const getProjectCards = unstable_cache(
       blocked: Number(r.blocked),
       members: (r.members ?? []).slice(0, 4),
     }))
-  },
-  ["dashboard:project-cards"],
-  { tags: [PROJECTS_TAG, MEMBERS_TAG] },
-)
+    },
+    ["dashboard:project-cards", String(limit)],
+    { tags: [PROJECTS_TAG, MEMBERS_TAG] },
+  )
+  return load()
+}
 
 /** 我的待办：数据库侧按负责人过滤 + 排序 + 限量 */
 export async function getMyTasks(memberId: string, limit = 5): Promise<TaskItem[]> {
@@ -267,7 +273,7 @@ export const getReportProjects = unstable_cache(
   async (): Promise<ReportProject[]> => {
     await ensureSeeded()
     const { rows } = await db.execute<{ id: string; name: string }>(sql`
-      SELECT "id", "name" FROM "projects" ORDER BY "createdAt" ASC
+      SELECT "id", "name" FROM "projects" ORDER BY "createdAt" DESC
     `)
     return rows
   },

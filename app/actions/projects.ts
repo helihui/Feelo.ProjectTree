@@ -1,15 +1,36 @@
 "use server"
 
 import { db, pool } from "@/lib/db"
-import { members, projects, nodes, nodeComments, invitations } from "@/lib/db/schema"
-import type { NodeRow, MemberRow, NodeCommentRow } from "@/lib/db/schema"
+import { members, projects, invitations } from "@/lib/db/schema"
+import type { MemberRow } from "@/lib/db/schema"
 import { ensureSeeded } from "@/lib/db/seed"
-import type { Project, TreeNode, NodeStatus, NodeType, Priority, User, Comment } from "@/lib/types"
+import type { Project, TreeNode, NodeType, Priority, User } from "@/lib/types"
 import { assertPermission, getCurrentMember } from "@/lib/session"
-import { canEditNode, toRoleKey, type RoleKey } from "@/lib/permissions"
-import { MEMBERS_TAG, PROJECTS_TAG, projectTag } from "@/lib/cache-tags"
-import { and, asc, count, eq, inArray, isNull, gt } from "drizzle-orm"
+import { toRoleKey, type RoleKey } from "@/lib/permissions"
+import { MEMBERS_TAG, PROJECTS_TAG } from "@/lib/cache-tags"
+import { and, asc, eq, isNull, gt } from "drizzle-orm"
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
+import type { Actor } from "@/lib/core/actor"
+import {
+  addCommentCore,
+  addNodeCore,
+  createProjectCore,
+  deleteCommentCore,
+  deleteNodeCore,
+  deleteProjectCore,
+  getProjectDetail,
+  updateNodeCore,
+  updateProjectMembersCore,
+  type NodePatchInput,
+  type TreeInput,
+} from "@/lib/core/projects"
+
+/** 网页会话的 Actor：不额外收窄权限范围 */
+async function currentActor(): Promise<Actor> {
+  const member = await getCurrentMember()
+  if (!member) throw new Error("请先登录")
+  return { memberId: member.memberId, roleKey: member.roleKey, scopes: null }
+}
 
 export type DatabaseTableInfo = {
   schema: string
@@ -22,6 +43,11 @@ export async function getDatabaseTables(input?: {
   includeViews?: boolean
   includeSystemSchemas?: boolean
 }): Promise<DatabaseTableInfo[]> {
+  // 库表结构属于敏感信息，仅管理员可读
+  const member = await getCurrentMember()
+  if (!member) throw new Error("请先登录")
+  if (member.roleKey !== "admin") throw new Error("没有操作权限")
+
   const includeViews = input?.includeViews ?? false
   const includeSystemSchemas = input?.includeSystemSchemas ?? false
 
@@ -55,40 +81,6 @@ export async function getDatabaseTables(input?: {
     name: r.table_name,
     type: r.table_type,
   }))
-}
-
-function rowToComment(row: NodeCommentRow): Comment {
-  return {
-    id: row.id,
-    authorId: row.authorId,
-    content: row.content,
-    createdAt: row.createdAt.toISOString().slice(0, 10),
-  }
-}
-
-function rowToTreeNode(
-  row: NodeRow,
-  byParent: Map<string | null, NodeRow[]>,
-  commentsByNode: Map<string, Comment[]>,
-): TreeNode {
-  const children = (byParent.get(row.id) ?? []).map((c) => rowToTreeNode(c, byParent, commentsByNode))
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    type: row.type as NodeType,
-    status: row.status as NodeStatus,
-    priority: row.priority as Priority,
-    progress: row.progress,
-    assigneeIds: (row.assigneeIds ?? []) as string[],
-    startDate: row.startDate,
-    dueDate: row.dueDate,
-    estimateHours: row.estimateHours,
-    tags: (row.tags ?? []) as string[],
-    comments: commentsByNode.get(row.id) ?? [],
-    aiGenerated: row.aiGenerated,
-    children,
-  }
 }
 
 export async function getMembers(): Promise<User[]> {
@@ -148,105 +140,18 @@ export async function getProjectSummaries() {
 }
 
 export async function getProject(projectId: string): Promise<Project | null> {
-  const loadProject = unstable_cache(
-    async (): Promise<Project | null> => {
-      await ensureSeeded()
-      const [p] = await db.select().from(projects).where(eq(projects.id, projectId))
-      if (!p) return null
-
-      const allNodes = await db
-        .select()
-        .from(nodes)
-        .where(eq(nodes.projectId, projectId))
-        .orderBy(asc(nodes.sortOrder), asc(nodes.createdAt))
-
-      const byParent = new Map<string | null, NodeRow[]>()
-      for (const n of allNodes) {
-        const key = n.parentId
-        if (!byParent.has(key)) byParent.set(key, [])
-        byParent.get(key)!.push(n)
-      }
-      const rootRow = (byParent.get(null) ?? [])[0]
-      if (!rootRow) return null
-
-      const nodeIds = allNodes.map((n) => n.id)
-      const commentsByNode = new Map<string, Comment[]>()
-      if (nodeIds.length) {
-        const allComments = await db
-          .select()
-          .from(nodeComments)
-          .where(eq(nodeComments.projectId, projectId))
-          .orderBy(asc(nodeComments.createdAt))
-        for (const c of allComments) {
-          if (!commentsByNode.has(c.nodeId)) commentsByNode.set(c.nodeId, [])
-          commentsByNode.get(c.nodeId)!.push(rowToComment(c))
-        }
-      }
-
-      return {
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        ownerId: p.ownerId ?? "",
-        memberIds: (p.memberIds ?? []) as string[],
-        createdAt: p.createdAt.toISOString().slice(0, 10),
-        updatedAt: p.updatedAt.toISOString().slice(0, 10),
-        root: rowToTreeNode(rootRow, byParent, commentsByNode),
-      }
-    },
-    ["project:detail", projectId],
-    { tags: [projectTag(projectId)] },
-  )
-
-  return loadProject()
+  return getProjectDetail(projectId)
 }
 
 // ---- 节点增删改 ----
 
-export interface NodePatch {
-  title?: string
-  description?: string
-  status?: NodeStatus
-  priority?: Priority
-  progress?: number
-  assigneeIds?: string[]
-  startDate?: string | null
-  dueDate?: string | null
-  estimateHours?: number
-  tags?: string[]
-}
-
-/** 校验当前用户能否编辑指定节点，返回当前成员 */
-async function assertNodeEditable(nodeId: string) {
-  const member = await getCurrentMember()
-  if (!member) throw new Error("请先登录")
-  const [row] = await db
-    .select({ assigneeIds: nodes.assigneeIds })
-    .from(nodes)
-    .where(eq(nodes.id, nodeId))
-  const assigneeIds = (row?.assigneeIds ?? []) as string[]
-  if (!canEditNode(member.roleKey, assigneeIds, member.memberId)) {
-    throw new Error("没有操作权限")
-  }
-  return member
-}
+export type NodePatch = NodePatchInput
 
 export async function updateNode(projectId: string, nodeId: string, patch: NodePatch) {
-  const member = await assertNodeEditable(nodeId)
-  // 普通成员仅能改自己负责节点的状态与进度
-  const allowed: NodePatch =
-    member.roleKey === "admin" || member.roleKey === "manager"
-      ? patch
-      : { status: patch.status, progress: patch.progress }
-  const set = Object.fromEntries(
-    Object.entries(allowed).filter(([, v]) => v !== undefined),
-  )
-  if (Object.keys(set).length === 0) return
-  await db.update(nodes).set(set).where(eq(nodes.id, nodeId))
-  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
-  // 客户端已做乐观更新，只失效缓存标签即可，无需 revalidatePath 触发整页重渲染
-  revalidateTag(projectTag(projectId), "max")
-  revalidateTag(PROJECTS_TAG, "max")
+  // 前端可能传来全 undefined 的 patch，直接短路，避免核心层抛错
+  if (Object.values(patch).every((v) => v === undefined)) return
+  const actor = await currentActor()
+  await updateNodeCore(actor, projectId, nodeId, patch)
 }
 
 export async function addNode(
@@ -264,60 +169,48 @@ export async function addNode(
     tags?: string[]
   },
 ) {
-  await assertPermission("node:manage")
-  const id = `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
-  const [{ value: siblingCount }] = await db
-    .select({ value: count() })
-    .from(nodes)
-    .where(and(eq(nodes.projectId, projectId), eq(nodes.parentId, parentId)))
-  await db.insert(nodes).values({
-    id,
-    projectId,
-    parentId,
-    title: input.title,
-    description: input.description ?? "",
-    type: input.type ?? "task",
-    status: "todo",
-    priority: input.priority ?? "medium",
-    progress: 0,
-    assigneeIds: input.assigneeIds ?? [],
-    startDate: input.startDate ?? null,
-    dueDate: input.dueDate ?? null,
-    estimateHours: input.estimateHours ?? 0,
-    tags: input.tags ?? [],
-    aiGenerated: false,
-    sortOrder: siblingCount,
-  })
-  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
-  revalidateTag(projectTag(projectId), "max")
-  revalidateTag(PROJECTS_TAG, "max")
-  return id
+  const actor = await currentActor()
+  return addNodeCore(actor, projectId, parentId, input)
 }
 
 export async function deleteNode(projectId: string, nodeId: string) {
-  await assertPermission("node:manage")
-  // 递归收集子孙
-  const all = await db
-    .select({ id: nodes.id, parentId: nodes.parentId })
-    .from(nodes)
-    .where(eq(nodes.projectId, projectId))
-  const childrenOf = new Map<string | null, string[]>()
-  for (const n of all) {
-    if (!childrenOf.has(n.parentId)) childrenOf.set(n.parentId, [])
-    childrenOf.get(n.parentId)!.push(n.id)
-  }
-  const toDelete: string[] = []
-  const stack = [nodeId]
-  while (stack.length) {
-    const cur = stack.pop()!
-    toDelete.push(cur)
-    for (const c of childrenOf.get(cur) ?? []) stack.push(c)
-  }
-  // 批量删除，避免逐条往返
-  await db.delete(nodes).where(inArray(nodes.id, toDelete))
-  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
-  revalidateTag(projectTag(projectId), "max")
-  revalidateTag(PROJECTS_TAG, "max")
+  const actor = await currentActor()
+  await deleteNodeCore(actor, projectId, nodeId)
+}
+
+// ---- 项目增删 ----
+
+export async function createProject(input: {
+  name: string
+  description?: string
+  tree: TreeNode
+}) {
+  const actor = await currentActor()
+  const { projectId } = await createProjectCore(actor, {
+    name: input.name,
+    description: input.description,
+    tree: input.tree as TreeInput,
+  })
+  revalidatePath("/")
+  revalidatePath("/projects")
+  return projectId
+}
+
+export async function deleteProject(projectId: string) {
+  const actor = await currentActor()
+  await deleteProjectCore(actor, projectId)
+  revalidatePath("/")
+  revalidatePath("/projects")
+}
+
+/** 更新项目参与成员。管理员可改任意项目，项目经理只能改自己创建的 */
+export async function updateProjectMembers(projectId: string, memberIds: string[]) {
+  const actor = await currentActor()
+  const next = await updateProjectMembersCore(actor, projectId, memberIds)
+  revalidatePath("/")
+  revalidatePath("/projects")
+  revalidatePath(`/projects/${projectId}`)
+  return next
 }
 
 // ---- 节点评论 ----
@@ -327,25 +220,9 @@ export async function addNodeComment(
   nodeId: string,
   input: { content: string },
 ) {
-  const member = await assertPermission("comment:write")
-  const text = input.content.trim()
-  if (!text) return null
-  const id = `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
-  await db.insert(nodeComments).values({
-    id,
-    nodeId,
-    projectId,
-    authorId: member.memberId,
-    content: text,
-  })
-  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
-  revalidateTag(projectTag(projectId), "max")
-  return {
-    id,
-    authorId: member.memberId,
-    content: text,
-    createdAt: new Date().toISOString().slice(0, 10),
-  } as Comment
+  const actor = await currentActor()
+  if (!input.content.trim()) return null
+  return addCommentCore(actor, projectId, nodeId, input.content)
 }
 
 export async function deleteNodeComment(
@@ -353,18 +230,8 @@ export async function deleteNodeComment(
   nodeId: string,
   commentId: string,
 ) {
-  const member = await getCurrentMember()
-  if (!member) throw new Error("请先登录")
-  const [row] = await db
-    .select({ authorId: nodeComments.authorId })
-    .from(nodeComments)
-    .where(eq(nodeComments.id, commentId))
-  const isOwn = row?.authorId === member.memberId
-  if (!isOwn && member.roleKey !== "admin" && member.roleKey !== "manager") {
-    throw new Error("没有操作权限")
-  }
-  await db.delete(nodeComments).where(eq(nodeComments.id, commentId))
-  revalidateTag(projectTag(projectId), "max")
+  const actor = await currentActor()
+  await deleteCommentCore(actor, projectId, commentId)
   void nodeId
 }
 
@@ -465,4 +332,3 @@ export async function createInvitation(memberId: string) {
   revalidatePath("/members")
   return { token, expiresAt: expiresAt.toISOString().slice(0, 10) }
 }
-

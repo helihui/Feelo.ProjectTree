@@ -222,6 +222,54 @@ export async function ensureSchema(): Promise<void> {
         ON "invitations" ("memberId")
       `)
 
+      // MCP 对外接口密钥
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "api_keys" (
+          "id" text PRIMARY KEY,
+          "name" text NOT NULL,
+          "keyHash" text NOT NULL,
+          "keyPrefix" text NOT NULL,
+          "memberId" text NOT NULL,
+          "scopes" jsonb NOT NULL DEFAULT '[]'::jsonb,
+          "enabled" boolean NOT NULL DEFAULT true,
+          "expiresAt" timestamp,
+          "lastUsedAt" timestamp,
+          "createdBy" text NOT NULL,
+          "createdAt" timestamp NOT NULL DEFAULT now()
+        )
+      `)
+
+      // 校验密钥时按摘要精确命中
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_api_keys_hash"
+        ON "api_keys" ("keyHash")
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_api_keys_member"
+        ON "api_keys" ("memberId")
+      `)
+
+      // MCP 调用审计
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "mcp_audit_logs" (
+          "id" text PRIMARY KEY,
+          "keyId" text,
+          "memberId" text,
+          "tool" text NOT NULL,
+          "projectId" text,
+          "ok" boolean NOT NULL,
+          "errorCode" text,
+          "durationMs" integer NOT NULL DEFAULT 0,
+          "createdAt" timestamp NOT NULL DEFAULT now()
+        )
+      `)
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_mcp_audit_created"
+        ON "mcp_audit_logs" ("createdAt" DESC)
+      `)
+
       await client.query("COMMIT")
     } catch (err) {
       schemaPromise = null

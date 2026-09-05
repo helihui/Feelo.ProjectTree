@@ -64,11 +64,13 @@ function PreviewNode({ node, depth }: { node: TreeNode; depth: number }) {
 
 export function PreviewTree({
   tree,
+  saving,
   onBack,
   onRegenerate,
   onConfirm,
 }: {
   tree: TreeNode
+  saving?: boolean
   onBack: () => void
   onRegenerate: () => void
   onConfirm: () => void
@@ -88,13 +90,13 @@ export function PreviewTree({
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onRegenerate} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={onRegenerate} disabled={saving} className="gap-1.5">
             <RefreshCw className="h-4 w-4" />
             重新生成
           </Button>
-          <Button size="sm" onClick={onConfirm} className="gap-1.5">
+          <Button size="sm" onClick={onConfirm} disabled={saving} className="gap-1.5">
             <Check className="h-4 w-4" />
-            确认并创建
+            {saving ? "创建中…" : "确认并创建"}
           </Button>
         </div>
       </div>

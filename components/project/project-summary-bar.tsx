@@ -1,18 +1,20 @@
 import type { Project, TreeNode, User } from "@/lib/types"
-import { computeProgress, computeStats, resolveUser } from "@/lib/tree-utils"
+import { computeProgress, computeStats } from "@/lib/tree-utils"
 import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { STATUS_META } from "@/lib/tree-utils"
 import { cn } from "@/lib/utils"
+import { ProjectMembersBar } from "./project-members-bar"
 
 export function ProjectSummaryBar({
   root,
   project,
   members,
+  canManageMembers,
 }: {
   root: TreeNode
   project: Project
   members: User[]
+  canManageMembers: boolean
 }) {
   const progress = computeProgress(root)
   const stats = computeStats(root)
@@ -51,24 +53,13 @@ export function ProjectSummaryBar({
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex flex-col items-end">
-          <span className="text-xs text-muted-foreground">团队成员</span>
-          <div className="mt-1 flex -space-x-2">
-            {project.memberIds.map((id) => {
-              const u = resolveUser(members, id)
-              return (
-                <Avatar key={id} className="h-7 w-7 border-2 border-background">
-                  <AvatarFallback
-                    className="text-[10px] font-semibold text-primary-foreground"
-                    style={{ backgroundColor: u.color }}
-                  >
-                    {u.initials}
-                  </AvatarFallback>
-                </Avatar>
-              )
-            })}
-          </div>
-        </div>
+        <ProjectMembersBar
+          projectId={project.id}
+          ownerId={project.ownerId}
+          memberIds={project.memberIds}
+          members={members}
+          canManage={canManageMembers}
+        />
       </div>
     </div>
   )

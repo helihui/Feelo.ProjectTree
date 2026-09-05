@@ -150,6 +150,12 @@ http://localhost:3000/api/db/stats?seed=1
 - **Server Action 校验**：`assertPermission()` / `assertNodeEditable()` 在写库前再校验一次，直接抛出「没有操作权限」，防止绕过 UI 调用。
 - **UI 收敛**：侧边栏按角色过滤导航，节点详情面板按 `canManageNodes` / `canEdit` / `canComment` 禁用对应控件。
 
+## 对外 MCP 接口
+
+`POST /api/mcp` 以 MCP（协议版本 `2026-07-28`）对外开放 16 个工具，覆盖项目与任务树的增删改查、批量推进进度、成员与评论。鉴权用 `x-api-key`，密钥在 `/api-keys` 页面自助签发，权限为「成员角色 ∩ 密钥 scope」。
+
+第三方接入请看 [docs/MCP-对接指南.md](./docs/MCP-对接指南.md)。
+
 ## 部署与外部资源
 
 以下两个目录存放部署相关的凭证与配置，**均包含敏感信息，切勿提交到公共仓库**。

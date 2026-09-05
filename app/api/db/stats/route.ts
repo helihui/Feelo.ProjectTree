@@ -1,5 +1,6 @@
 import { ensureSchema, pool } from "@/lib/db"
 import { ensureSeeded } from "@/lib/db/seed"
+import { getCurrentMember } from "@/lib/session"
 import { NextResponse } from "next/server"
 
 async function count(table: string): Promise<number> {
@@ -8,6 +9,13 @@ async function count(table: string): Promise<number> {
 }
 
 export async function GET(request: Request) {
+  // 库内统计与播种触发属于敏感操作，仅管理员可用
+  const member = await getCurrentMember()
+  if (!member) return NextResponse.json({ error: "请先登录" }, { status: 401 })
+  if (member.roleKey !== "admin") {
+    return NextResponse.json({ error: "没有操作权限" }, { status: 403 })
+  }
+
   await ensureSchema()
 
   const url = new URL(request.url)

@@ -35,7 +35,7 @@ export default async function ProjectsPage() {
             </div>
           }
         >
-          <ProjectGrid />
+          <ProjectGrid limit={100} showAllLink={false} />
         </Suspense>
       </div>
     </>

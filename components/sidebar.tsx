@@ -11,6 +11,7 @@ import {
   MessageSquareText,
   Settings,
   GitBranch,
+  KeyRound,
   Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -42,12 +43,15 @@ export function Sidebar({
     { href: "/reports", label: "进度报告", icon: FileText, show: true },
   ].filter((i) => i.show)
 
-  const navSettings = canConfigureAI
-    ? [
-        { href: "/models", label: "AI 模型", icon: Cpu },
-        { href: "/prompts", label: "Prompt 模板", icon: MessageSquareText },
-      ]
-    : []
+  const navSettings = [
+    ...(canConfigureAI
+      ? [
+          { href: "/models", label: "AI 模型", icon: Cpu },
+          { href: "/prompts", label: "Prompt 模板", icon: MessageSquareText },
+        ]
+      : []),
+    { href: "/api-keys", label: "API 密钥", icon: KeyRound },
+  ]
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)

@@ -75,6 +75,9 @@ export function ProjectView({
   const initialNode = searchParams.get("node")
   const canManageNodes = hasPermission(roleKey, "node:manage")
   const canComment = hasPermission(roleKey, "comment:write")
+  // 管理员可调整任意项目的成员，项目经理只能调整自己创建的项目
+  const canManageMembers =
+    roleKey === "admin" || (roleKey === "manager" && initial.ownerId === currentMemberId)
 
   const [root, setRoot] = useState<TreeNode>(initial.root)
   const [selectedId, setSelectedId] = useState<string | null>(initialNode)
@@ -332,7 +335,12 @@ export function ProjectView({
               {initial.description}
             </p>
           </div>
-          <ProjectSummaryBar root={root} project={initial} members={members} />
+          <ProjectSummaryBar
+            root={root}
+            project={initial}
+            members={members}
+            canManageMembers={canManageMembers}
+          />
         </header>
       )}
 

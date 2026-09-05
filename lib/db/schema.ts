@@ -74,6 +74,39 @@ export const nodeComments = pgTable("node_comments", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// MCP 对外接口的访问密钥（只存 SHA-256 摘要，原文仅创建时返回一次）
+export const apiKeys = pgTable("api_keys", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  // 密钥摘要，sha256(原文) 的 hex
+  keyHash: text("keyHash").notNull(),
+  // 原文前缀，用于列表展示，如 pt_live_a1b2c3
+  keyPrefix: text("keyPrefix").notNull(),
+  // 密钥归属成员，调用时以该成员身份执行
+  memberId: text("memberId").notNull(),
+  // 授权范围，取值为 lib/permissions.ts 的 Permission；空数组表示只读
+  scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+  enabled: boolean("enabled").notNull().default(true),
+  expiresAt: timestamp("expiresAt"),
+  lastUsedAt: timestamp("lastUsedAt"),
+  createdBy: text("createdBy").notNull(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// MCP 调用审计
+export const mcpAuditLogs = pgTable("mcp_audit_logs", {
+  id: text("id").primaryKey(),
+  keyId: text("keyId"),
+  memberId: text("memberId"),
+  tool: text("tool").notNull(),
+  projectId: text("projectId"),
+  ok: boolean("ok").notNull(),
+  errorCode: text("errorCode"),
+  durationMs: integer("durationMs").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect
 export type MemberRow = typeof members.$inferSelect
 export type ProjectRow = typeof projects.$inferSelect
 export type NodeRow = typeof nodes.$inferSelect

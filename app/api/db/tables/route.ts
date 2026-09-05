@@ -1,4 +1,5 @@
 import { ensureSchema, pool } from "@/lib/db"
+import { getCurrentMember } from "@/lib/session"
 import { NextResponse } from "next/server"
 
 type TableRow = {
@@ -8,6 +9,13 @@ type TableRow = {
 }
 
 export async function GET(request: Request) {
+  // 库表结构属于敏感信息，仅管理员可读
+  const member = await getCurrentMember()
+  if (!member) return NextResponse.json({ error: "请先登录" }, { status: 401 })
+  if (member.roleKey !== "admin") {
+    return NextResponse.json({ error: "没有操作权限" }, { status: 403 })
+  }
+
   await ensureSchema()
   const url = new URL(request.url)
   const schema = url.searchParams.get("schema") ?? undefined

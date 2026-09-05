@@ -49,6 +49,6 @@ Invoke-Ssh "cd $RemoteDir/app && docker compose -p projecttree up -d --force-rec
 
 Write-Host "[6/6] 健康检查..." -ForegroundColor Cyan
 Start-Sleep -Seconds 8
-Invoke-Ssh "docker ps --filter name=projecttree-app --format '{{.Names}} {{.Status}}'; docker exec projecttree-app node -e ""fetch('http://127.0.0.1:3000/sign-in').then(r=>{console.log('LOCAL_HTTP',r.status);process.exit(r.ok?0:1)}).catch(e=>{console.error(e.message);process.exit(1)})"""
+Invoke-Ssh "docker ps --filter name=projecttree-app --format '{{.Names}} {{.Status}}'; docker exec mcp-hub-nginx wget -q -S -O /dev/null http://projecttree-app:3000/sign-in 2>&1 | head -1"
 
 Write-Host "部署完成: https://projecttree.feelo.top" -ForegroundColor Green

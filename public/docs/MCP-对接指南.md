@@ -1224,7 +1224,7 @@ const tools = await client.listTools()
 const result = await client.callTool({ name: "whoami", arguments: {} })
 ```
 
-> 请确认你的 SDK 版本支持 MCP `2026-07-28`。老版本 SDK 会尝试 `initialize` 握手并且不发 `_meta`，导致 400。此时请改用 [11.3 的原生 fetch 封装](#113-原生-fetch-最稳妥)。
+> 请确认你的 SDK 版本支持 MCP `2026-07-28`。老版本 SDK 会尝试 `initialize` 握手并且不发 `_meta`，导致 400。此时请改用 [11.3 的原生 fetch 封装](#113-原生-fetch最稳妥)。
 
 ### 11.2 Claude Desktop / 支持配置文件的客户端
 

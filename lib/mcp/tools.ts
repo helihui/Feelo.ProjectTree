@@ -117,7 +117,7 @@ export function registerTools(server: McpServer, caller: McpCaller) {
       annotations: { readOnlyHint: true },
     },
     guard(caller, "list_projects", async ({ limit, offset }) => {
-      const projects = await listProjects(limit ?? 50, offset ?? 0)
+      const projects = await listProjects(limit ?? 50, offset ?? 0, { skipCache: true })
       return ok(
         `共 ${projects.length} 个项目：${projects.map((p) => `${p.name}(${p.id}, ${p.progress}%)`).join("、") || "无"}`,
         { projects, count: projects.length },
@@ -147,7 +147,7 @@ export function registerTools(server: McpServer, caller: McpCaller) {
       caller,
       "get_project",
       async ({ projectId, depth }) => {
-        const project = await getProjectDetail(projectId, depth ?? 99)
+        const project = await getProjectDetail(projectId, depth ?? 99, { skipCache: true })
         if (!project) return fail("not_found", "项目不存在")
         return ok(`项目「${project.name}」，根节点 ${project.root.children.length} 个直接子节点`, {
           project,

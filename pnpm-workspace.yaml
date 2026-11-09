@@ -1,0 +1,11 @@
+nodeLinker: hoisted
+
+overrides:
+  kysely: 0.28.17
+
+onlyBuiltDependencies:
+  - sharp
+
+allowBuilds:
+  msw: set this to true or false
+  sharp: set this to true or false

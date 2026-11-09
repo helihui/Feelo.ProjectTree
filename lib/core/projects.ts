@@ -185,101 +185,117 @@ export interface ProjectSummary {
   updatedAt: string
 }
 
-/** 项目摘要列表，按创建时间倒序 */
-export async function listProjects(limit = 50, offset = 0): Promise<ProjectSummary[]> {
-  const load = unstable_cache(
-    async (): Promise<ProjectSummary[]> => {
-      await ensureSeeded()
-      const rows = await db.select().from(projects)
-      const nodeRows = await db
-        .select({ projectId: nodes.projectId, progress: nodes.progress, id: nodes.id })
-        .from(nodes)
-      const statsByProject = new Map<string, { total: number; sum: number }>()
-      for (const n of nodeRows) {
-        const cur = statsByProject.get(n.projectId) ?? { total: 0, sum: 0 }
-        cur.total += 1
-        cur.sum += n.progress
-        statsByProject.set(n.projectId, cur)
-      }
-      return rows
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .map((p) => {
-          const s = statsByProject.get(p.id) ?? { total: 0, sum: 0 }
-          return {
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            ownerId: p.ownerId,
-            memberIds: (p.memberIds ?? []) as string[],
-            nodeCount: s.total,
-            progress: s.total ? Math.round(s.sum / s.total) : 0,
-            createdAt: p.createdAt.toISOString(),
-            updatedAt: p.updatedAt.toISOString(),
-          }
-        })
-    },
-    ["core:projects:summary"],
-    { tags: [PROJECTS_TAG] },
-  )
-  const all = await load()
-  return all.slice(offset, offset + limit)
-}
-
-/** 项目详情（含嵌套树）。maxDepth 控制返回层级，避免超大响应 */
-export async function getProjectDetail(
-  projectId: string,
-  maxDepth = 99,
-): Promise<Project | null> {
-  const load = unstable_cache(
-    async (): Promise<Project | null> => {
-      await ensureSeeded()
-      const [p] = await db.select().from(projects).where(eq(projects.id, projectId))
-      if (!p) return null
-
-      const allNodes = await db
-        .select()
-        .from(nodes)
-        .where(eq(nodes.projectId, projectId))
-        .orderBy(asc(nodes.sortOrder), asc(nodes.createdAt))
-
-      const byParent = new Map<string | null, NodeRow[]>()
-      for (const n of allNodes) {
-        const key = n.parentId
-        if (!byParent.has(key)) byParent.set(key, [])
-        byParent.get(key)!.push(n)
-      }
-      const rootRow = (byParent.get(null) ?? [])[0]
-      if (!rootRow) return null
-
-      const commentsByNode = new Map<string, Comment[]>()
-      if (allNodes.length) {
-        const allComments = await db
-          .select()
-          .from(nodeComments)
-          .where(eq(nodeComments.projectId, projectId))
-          .orderBy(asc(nodeComments.createdAt))
-        for (const c of allComments) {
-          if (!commentsByNode.has(c.nodeId)) commentsByNode.set(c.nodeId, [])
-          commentsByNode.get(c.nodeId)!.push(rowToComment(c))
-        }
-      }
-
+/** 项目摘要列表的直读 DB 实现（不经应用层缓存） */
+async function listProjectsUncached(): Promise<ProjectSummary[]> {
+  await ensureSeeded()
+  const rows = await db.select().from(projects)
+  const nodeRows = await db
+    .select({ projectId: nodes.projectId, progress: nodes.progress, id: nodes.id })
+    .from(nodes)
+  const statsByProject = new Map<string, { total: number; sum: number }>()
+  for (const n of nodeRows) {
+    const cur = statsByProject.get(n.projectId) ?? { total: 0, sum: 0 }
+    cur.total += 1
+    cur.sum += n.progress
+    statsByProject.set(n.projectId, cur)
+  }
+  return rows
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((p) => {
+      const s = statsByProject.get(p.id) ?? { total: 0, sum: 0 }
       return {
         id: p.id,
         name: p.name,
         description: p.description,
-        ownerId: p.ownerId ?? "",
+        ownerId: p.ownerId,
         memberIds: (p.memberIds ?? []) as string[],
-        createdAt: p.createdAt.toISOString().slice(0, 10),
-        updatedAt: p.updatedAt.toISOString().slice(0, 10),
-        root: rowToTreeNode(rootRow, byParent, commentsByNode, 1, 99),
+        nodeCount: s.total,
+        progress: s.total ? Math.round(s.sum / s.total) : 0,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
       }
-    },
-    ["core:project:detail", projectId],
-    { tags: [projectTag(projectId)] },
-  )
+    })
+}
 
-  const full = await load()
+/**
+ * 项目摘要列表，按创建时间倒序。
+ * 网页端走 unstable_cache；写后需立即读最新值的调用方（如 MCP/CLI）传 skipCache。
+ */
+export async function listProjects(
+  limit = 50,
+  offset = 0,
+  opts: { skipCache?: boolean } = {},
+): Promise<ProjectSummary[]> {
+  const all = opts.skipCache
+    ? await listProjectsUncached()
+    : await unstable_cache(listProjectsUncached, ["core:projects:summary"], {
+        tags: [PROJECTS_TAG],
+      })()
+  return all.slice(offset, offset + limit)
+}
+
+/** 项目详情（含嵌套树）的直读 DB 实现（不经应用层缓存） */
+async function getProjectDetailUncached(projectId: string): Promise<Project | null> {
+  await ensureSeeded()
+  const [p] = await db.select().from(projects).where(eq(projects.id, projectId))
+  if (!p) return null
+
+  const allNodes = await db
+    .select()
+    .from(nodes)
+    .where(eq(nodes.projectId, projectId))
+    .orderBy(asc(nodes.sortOrder), asc(nodes.createdAt))
+
+  const byParent = new Map<string | null, NodeRow[]>()
+  for (const n of allNodes) {
+    const key = n.parentId
+    if (!byParent.has(key)) byParent.set(key, [])
+    byParent.get(key)!.push(n)
+  }
+  const rootRow = (byParent.get(null) ?? [])[0]
+  if (!rootRow) return null
+
+  const commentsByNode = new Map<string, Comment[]>()
+  if (allNodes.length) {
+    const allComments = await db
+      .select()
+      .from(nodeComments)
+      .where(eq(nodeComments.projectId, projectId))
+      .orderBy(asc(nodeComments.createdAt))
+    for (const c of allComments) {
+      if (!commentsByNode.has(c.nodeId)) commentsByNode.set(c.nodeId, [])
+      commentsByNode.get(c.nodeId)!.push(rowToComment(c))
+    }
+  }
+
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    ownerId: p.ownerId ?? "",
+    memberIds: (p.memberIds ?? []) as string[],
+    createdAt: p.createdAt.toISOString().slice(0, 10),
+    updatedAt: p.updatedAt.toISOString().slice(0, 10),
+    root: rowToTreeNode(rootRow, byParent, commentsByNode, 1, 99),
+  }
+}
+
+/**
+ * 项目详情（含嵌套树）。maxDepth 控制返回层级，避免超大响应。
+ * 网页端走 unstable_cache；写后需立即读最新值的调用方（如 MCP/CLI）传 skipCache。
+ */
+export async function getProjectDetail(
+  projectId: string,
+  maxDepth = 99,
+  opts: { skipCache?: boolean } = {},
+): Promise<Project | null> {
+  const full = opts.skipCache
+    ? await getProjectDetailUncached(projectId)
+    : await unstable_cache(
+        () => getProjectDetailUncached(projectId),
+        ["core:project:detail", projectId],
+        { tags: [projectTag(projectId)] },
+      )()
   if (!full || maxDepth >= 99) return full
   // 深度裁剪在缓存外做，避免不同 depth 串缓存
   const prune = (node: TreeNode, depth: number): TreeNode => ({
